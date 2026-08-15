@@ -1,0 +1,31 @@
+.DS_Store
+.idea/
+.vscode/
+
+# Local credentials and machine-specific state
+.env
+.env.*
+*.pem
+
+# Lean build output
+lean/.lake/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Web dependencies and builds
+ui/node_modules/
+ui/.next/
+ui/.vinext/
+ui/dist/
+ui/.wrangler/
+ui/coverage/
+ui/outputs/
+ui/work/
+ui/npm-debug.log*
+ui/yarn-debug.log*
+ui/yarn-error.log*
+ui/.pnpm-debug.log*
+

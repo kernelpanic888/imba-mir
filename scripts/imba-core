@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+core_bin="$project_dir/lean/.lake/build/bin/imba-core"
+
+if [ -x "$core_bin" ]; then
+  exec "$core_bin" "$@"
+fi
+
+cd "$project_dir/lean"
+lake_command=${LAKE:-lake}
+exec "$lake_command" exe imba-core "$@"

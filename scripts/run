@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+seed=${IMBA_SEED:-20260813}
+
+cd "$project_dir"
+export PYTHONPATH="$project_dir/python${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m imba --core "$project_dir/scripts/imba-core" --seed "$seed" "$@"

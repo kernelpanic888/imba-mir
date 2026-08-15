@@ -1,0 +1,71 @@
+{
+  "protocol": "0.1",
+  "seed": 20260813,
+  "requests": [
+    {
+      "argv": ["ping"],
+      "exit": 0,
+      "response": {"ok": true, "op": "ping", "version": "0.1"}
+    },
+    {
+      "argv": ["name", "5"],
+      "exit": 0,
+      "response": {
+        "ok": true,
+        "op": "name",
+        "rank": 5,
+        "name": "super-meta-nano-quasi-imba"
+      }
+    },
+    {
+      "argv": ["beats", "5", "4"],
+      "exit": 0,
+      "response": {
+        "ok": true,
+        "op": "beats",
+        "attacker": 5,
+        "defender": 4,
+        "result": true,
+        "reason": "attacker rank is strictly greater than defender rank"
+      }
+    },
+    {
+      "argv": ["beats", "4", "5"],
+      "exit": 0,
+      "response": {
+        "ok": true,
+        "op": "beats",
+        "attacker": 4,
+        "defender": 5,
+        "result": false,
+        "reason": "attacker rank is not strictly greater than defender rank"
+      }
+    },
+    {
+      "argv": ["fuse", "4", "4"],
+      "exit": 0,
+      "response": {
+        "ok": true,
+        "op": "fuse",
+        "left": 4,
+        "right": 4,
+        "allowed": true,
+        "rank": 5,
+        "name": "super-meta-nano-quasi-imba",
+        "reason": "equal ranks fuse into their stronger successor"
+      }
+    },
+    {
+      "argv": ["promote", "4", "2"],
+      "exit": 0,
+      "response": {
+        "ok": true,
+        "op": "promote",
+        "rank": 4,
+        "delta": 2,
+        "result": 6,
+        "name": "super-meta-nano-quasi-ultra-imba"
+      }
+    }
+  ]
+}

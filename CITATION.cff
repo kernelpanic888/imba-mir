@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this project, please cite it as follows."
+title: "IMBA / МИР"
+type: software
+version: 0.1.2
+date-released: 2026-08-16
+authors:
+  - family-names: Salkutsan
+    given-names: Aleksey
+    orcid: "https://orcid.org/0009-0002-3286-6994"
+repository-code: "https://github.com/kernelpanic888/imba-mir"
+url: "https://chertogi-razuma-research.kernelpanic888.chatgpt.site/"
+abstract: >-
+  A one-player formal game about a cursed digital raven, a living World,
+  player-authored spells, certified state transitions, and an unbounded Imba
+  hierarchy implemented with Lean 4, Python, and a web interface.
