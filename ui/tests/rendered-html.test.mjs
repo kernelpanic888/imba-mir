@@ -29,7 +29,7 @@ test("server-renders the Imba game shell", async () => {
   assert.match(html, /ЖИЗНЬ МИРА/);
   assert.match(html, /СОБЫТИЯ МИРА \/ КОМПЕНСАЦИЯ/);
   assert.match(html, /НАКОПИТЬ ТИК/);
-  assert.match(html, /ЗЕЛЁНАЯ ДОРОГА/i);
+  assert.match(html, /ШАГИ ПО ДОРОГЕ/i);
   assert.match(html, /ОСТАТОК ЗАКЛЯТИЯ/i);
   assert.match(html, /Путь ворона к Изумрудному замку/i);
   assert.match(html, /ОТВЕТЫ МИРА/);
@@ -76,6 +76,16 @@ test("starter preview is fully removed", async () => {
   assert.match(page, /ИЗУМРУДНЫЙ ПРОВОДНИК \/ ПРОЕКЦИЯ · НЕ ВЕРДИКТ/);
   assert.match(page, /ПРИМЕНИТЬ 1 ЗАМЕНУ/);
   assert.match(page, /evaluateSpellFormula/);
+  assert.match(page, /displayedSpellChoices/);
+  assert.match(page, /committedSpellEvaluation/);
+  assert.match(page, /onPointerEnter=\{\(\) => setSpellPreview/);
+  assert.match(page, /onPointerLeave=\{\(\) => setSpellPreview/);
+  assert.match(page, /onClickCapture=\{\(event\) =>/);
+  assert.match(page, /button\[data-slot\]\[data-term\]/);
+  assert.match(page, /data-slot=\{slot\}/);
+  assert.match(page, /data-preview=\{spellPreview\?\.slot/);
+  assert.match(page, /aria-pressed=\{spellChoices\[slot\] === term\.id\}/);
+  assert.match(page, /ПРЕДПРОСМОТР · КЛИК — ЗАКРЕПИТЬ/);
   assert.match(page, /ПРОВЕРИТЬ И СОТВОРИТЬ/);
   assert.match(page, /ОДИН ВЫБОР — ОДНО ИЗМЕНЕНИЕ ЖИВОЙ ПЕЧАТИ/);
   assert.match(page, /ПЕЧАТЬ ГОТОВА К ПРОЕКЦИИ/);
@@ -402,6 +412,10 @@ test("starter preview is fully removed", async () => {
   assert.match(styles, /\.combat-glyph-chain/);
   assert.match(styles, /\.combat-effects/);
   assert.match(styles, /\.balance-monitor/);
+  assert.match(styles, /\.reality-world-balance/);
+  assert.match(styles, /\.spell-rows button\[data-preview="true"\]/);
+  assert.match(page, /chapterCompletionMemoryKey/);
+  assert.match(page, /ПРОЙДИТЕ ПРЕДЫДУЩУЮ ГЛАВУ/);
   assert.match(styles, /\.story-prologue/);
   assert.match(styles, /\.game-menu/);
   assert.match(styles, /\.game-menu-chapters/);

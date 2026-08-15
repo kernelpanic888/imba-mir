@@ -1,11 +1,14 @@
 # IMBA / МИР
 
+![IMBA / МИР — Ворон на зелёной дороге](docs/assets/imba-mir-cover.png)
+
 > Один ворон · одна дорога · живой Мир  
 > One raven · one road · a living World
 
 **Author:** [Aleksey Salkutsan](AUTHORS.md)  
-**Source release:** `v0.1.2`  
+**Source release:** `v0.1.3`
 **Repository:** [github.com/kernelpanic888/imba-mir](https://github.com/kernelpanic888/imba-mir)
+**Categories:** Video game · Mathematics · Lean 4 formal methods
 
 Imba is a one-player game about building an unbounded stack in one square
 World. Every tick waits for manual confirmation before it becomes Imba + 1.

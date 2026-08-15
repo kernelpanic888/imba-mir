@@ -1546,6 +1546,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
 .game-menu-chapters::-webkit-scrollbar { display: none; }
 .game-menu-actions .game-menu-chapters button { flex: 0 0 min(100%,240px); min-height: 38px; grid-template-columns: auto auto; grid-template-rows: auto auto; gap: 3px 8px; padding: 7px 9px; border-color: rgba(105,178,176,.25); background: rgba(2,14,10,.78); box-shadow: none; scroll-snap-align: start; }
 .game-menu-actions .game-menu-chapters button[data-active="true"] { border-color: var(--world-cyan); background: linear-gradient(90deg,rgba(105,178,176,.14),rgba(3,20,14,.82)); box-shadow: inset 3px 0 var(--world-cyan); }
+.game-menu-actions .game-menu-chapters button[data-locked="true"] { border-style: dashed; border-color: rgba(105,178,176,.14); background: rgba(2,10,8,.68); color: var(--world-dim); cursor: not-allowed; opacity: .62; }
 .game-menu-actions .game-menu-chapters button span { font: 900 clamp(7px,.62vw,9px)/1 ui-monospace,monospace; letter-spacing: .08em; }
 .game-menu-actions .game-menu-chapters button b { grid-row: 1; grid-column: 2; color: var(--world-moss); font: 850 clamp(6px,.55vw,8px)/1 ui-monospace,monospace; letter-spacing: .08em; }
 .game-menu-actions .game-menu-chapters button small { grid-column: 1 / 3; color: var(--world-dim); font: 750 clamp(6px,.55vw,8px)/1 ui-monospace,monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2226,6 +2227,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
 .spell-rows button:hover,.spell-rows button:focus-visible {
   background: color-mix(in srgb,var(--world-moss) 10%,rgba(2,17,12,.78));
   transform: translateY(-2px);
+}
+.spell-rows button[data-preview="true"]:not([data-selected="true"]) {
+  border-color: var(--world-cyan);
+  background: color-mix(in srgb,var(--world-cyan) 11%,rgba(2,17,12,.78));
+  box-shadow: inset 3px 0 var(--world-cyan),0 0 16px color-mix(in srgb,var(--world-cyan) 12%,transparent);
 }
 .spell-rows button .spell-term-glyph { grid-row: 1 / 3; width: auto; font-size: clamp(26px,4cqw,40px); }
 .spell-rows button span { display: block; color: var(--world-moss); font-size: clamp(7px,.82cqw,9px); }
@@ -3310,6 +3316,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
   .reality-stage-slice .header-formula-chain span { height: 10px; }
   .reality-stage-slice .header-raven img { max-height: 52px; }
   .reality-stage-slice .header-world > div { width: 32px; }
+  .reality-world-balance { right: -2px; bottom: 7px; width: 42px; padding: 2px; }
+  .reality-world-balance small,.reality-world-balance span,.reality-world-balance > i { display: none; }
+  .reality-world-balance b { font-size: 8px; }
   .reality-stage-slice .header-action-track { min-height: 18px; }
   .infomagic-current { font-size: 4px; gap: 14px; }
   .infomagic-current--b,.infomagic-current--d,.infomagic-vortex { display: none; }
@@ -3362,6 +3371,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
 .balance-monitor > i { grid-column: 1 / -1; height: 3px; border: 1px solid var(--world-line); overflow: hidden; }.balance-monitor > i em { display: block; height: 100%; background: var(--world-moss); }
 .balance-monitor[data-state="UNSTABLE"] { border-color: var(--world-gold); }.balance-monitor[data-state="UNSTABLE"] span,.balance-monitor[data-state="UNSTABLE"] small { color: var(--world-gold); }.balance-monitor[data-state="UNSTABLE"] > i em { background: var(--world-gold); }
 .balance-monitor[data-state="CRITICAL"],.balance-monitor[data-state="BROKEN"] { border-color: var(--world-cut); }.balance-monitor[data-state="CRITICAL"] span,.balance-monitor[data-state="CRITICAL"] small,.balance-monitor[data-state="BROKEN"] span,.balance-monitor[data-state="BROKEN"] small { color: var(--world-cut); }.balance-monitor[data-state="CRITICAL"] > i em,.balance-monitor[data-state="BROKEN"] > i em { background: var(--world-cut); }
+.reality-world-balance { position: absolute; z-index: 8; right: 2px; bottom: 17px; width: min(104px,96%); display: grid; grid-template-columns: 1fr auto; gap: 2px 5px; padding: 5px 6px; border: 1px solid var(--world-moss); background: rgba(1,17,11,.9); box-shadow: 0 0 20px rgba(67,186,132,.18); color: var(--world-bone); font-family: ui-monospace,monospace; text-align: left; }
+.reality-world-balance small { color: var(--world-moss); font-size: clamp(5px,.66cqw,7px); font-weight: 950; letter-spacing: .08em; }
+.reality-world-balance b { color: var(--world-bone); font-size: clamp(12px,1.8cqw,19px); font-weight: 1000; line-height: .9; }
+.reality-world-balance span { grid-column: 1 / -1; position: static!important; color: var(--world-dim); font-size: clamp(4px,.55cqw,6px)!important; font-weight: 900; white-space: nowrap; }
+.reality-world-balance > i { grid-column: 1 / -1; height: 3px; overflow: hidden; border: 1px solid var(--world-line); }.reality-world-balance > i em { display: block; height: 100%; background: var(--world-moss); }
+.reality-world-balance[data-state="UNSTABLE"] { border-color: var(--world-gold); }.reality-world-balance[data-state="UNSTABLE"] small,.reality-world-balance[data-state="UNSTABLE"] span { color: var(--world-gold); }.reality-world-balance[data-state="UNSTABLE"] > i em { background: var(--world-gold); }
+.reality-world-balance[data-state="CRITICAL"],.reality-world-balance[data-state="BROKEN"] { border-color: var(--world-cut); box-shadow: 0 0 20px rgba(255,111,91,.24); }.reality-world-balance[data-state="CRITICAL"] small,.reality-world-balance[data-state="CRITICAL"] span,.reality-world-balance[data-state="BROKEN"] small,.reality-world-balance[data-state="BROKEN"] span { color: var(--world-cut); }.reality-world-balance[data-state="CRITICAL"] > i em,.reality-world-balance[data-state="BROKEN"] > i em { background: var(--world-cut); }
 @media (max-width: 1080px), (max-height: 760px) {
   .author-frontier { padding-block: 3px; }
   .tutorial-compass { top: 9%; padding: 4px 6px; }

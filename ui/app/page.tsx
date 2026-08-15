@@ -9,6 +9,7 @@ import {
   ACTIVE_CHAPTER_MEMORY_KEY,
   DEFAULT_CHAPTER_ID,
   STORY_CHAPTERS,
+  chapterCompletionMemoryKey,
   getStoryChapter,
   getStoryScene,
   storySceneMemoryKey,
@@ -472,6 +473,7 @@ export default function WorldHome() {
   const [seed, setSeed] = useState("20260813");
   const [calculation, setCalculation] = useState<CalculationView | null>(null);
   const [spellChoices, setSpellChoices] = useState<Record<SpellSlot, string | null>>({ SOURCE: null, INTENT: null, PATH: null, FORM: null });
+  const [spellPreview, setSpellPreview] = useState<{ slot: SpellSlot; termId: string } | null>(null);
   const [spellProjected, setSpellProjected] = useState(false);
   const [spellBindPulse, setSpellBindPulse] = useState(0);
   const [spellPerformance, setSpellPerformance] = useState<SpellPerformanceView | null>(null);
@@ -481,6 +483,7 @@ export default function WorldHome() {
   const [selectedChapterId, setSelectedChapterId] = useState(DEFAULT_CHAPTER_ID);
   const [storyPlayback, setStoryPlayback] = useState<StoryPlayback | null>(null);
   const [tutorialMarks, setTutorialMarks] = useState<TutorialObservation[]>([]);
+  const [completedChapterIds, setCompletedChapterIds] = useState<string[]>([]);
   const [menuOpen, setMenuOpen] = useState(true);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [metaphysicsOpen, setMetaphysicsOpen] = useState(false);
@@ -499,8 +502,21 @@ export default function WorldHome() {
   useEffect(() => {
     const rememberedLocale = window.localStorage.getItem(LOCALE_MEMORY_KEY);
     if (rememberedLocale === "ru" || rememberedLocale === "en") setLocale(rememberedLocale);
+    const completed = STORY_CHAPTERS.filter((candidate) => {
+      if (window.localStorage.getItem(chapterCompletionMemoryKey(candidate.id)) === "complete") return true;
+      if (!candidate.tutorial) return false;
+      try {
+        const marks = JSON.parse(window.localStorage.getItem(tutorialMemoryKey(candidate)) ?? "[]") as unknown;
+        return Array.isArray(marks) && candidate.tutorial.milestones.every((milestone) => marks.includes(milestone.id));
+      } catch {
+        return false;
+      }
+    }).map((candidate) => candidate.id);
+    setCompletedChapterIds(completed);
     const rememberedId = window.localStorage.getItem(ACTIVE_CHAPTER_MEMORY_KEY) ?? DEFAULT_CHAPTER_ID;
-    const chapter = getStoryChapter(rememberedId);
+    const rememberedChapter = getStoryChapter(rememberedId);
+    const rememberedUnlocked = STORY_CHAPTERS.filter((candidate) => candidate.order < rememberedChapter.order).every((candidate) => completed.includes(candidate.id));
+    const chapter = rememberedUnlocked ? rememberedChapter : getStoryChapter(DEFAULT_CHAPTER_ID);
     setSelectedChapterId(chapter.id);
     if (window.localStorage.getItem(storySceneMemoryKey(chapter.id, chapter.openingSceneId)) !== "complete") {
       setStoryPlayback({ chapterId: chapter.id, sceneId: chapter.openingSceneId, beat: 0 });
@@ -685,6 +701,7 @@ export default function WorldHome() {
   useEffect(() => {
     if (pendingSpellTick === null) return;
     setSpellChoices({ SOURCE: null, INTENT: null, PATH: null, FORM: null });
+    setSpellPreview(null);
     setSpellProjected(false);
     setSpellBindPulse(0);
     setSpellPerformance(null);
@@ -692,6 +709,7 @@ export default function WorldHome() {
   }, [pendingSpellTick]);
 
   const bindSpellTerm = useCallback((slot: SpellSlot, termId: string) => {
+    setSpellPreview(null);
     setSpellChoices((currentChoices) => ({
       ...currentChoices,
       [slot]: currentChoices[slot] === termId ? null : termId,
@@ -738,13 +756,19 @@ export default function WorldHome() {
   const progressChoicePending = world?.progression.pendingChoice ?? false;
   const spellLaw = world?.spell?.law ?? null;
   const spellSlots = (["SOURCE", "INTENT", "PATH", ...(spellLaw?.formRequired ? ["FORM" as const] : [])] as SpellSlot[]);
-  const spellEvaluation = spellLaw ? evaluateSpellFormula(spellLaw, spellChoices, spellSlots) : null;
+  const displayedSpellChoices = spellPreview
+    ? { ...spellChoices, [spellPreview.slot]: spellPreview.termId }
+    : spellChoices;
+  const committedSpellEvaluation = spellLaw ? evaluateSpellFormula(spellLaw, spellChoices, spellSlots) : null;
+  const spellEvaluation = spellLaw ? evaluateSpellFormula(spellLaw, displayedSpellChoices, spellSlots) : null;
   const selectedSpellTerms = spellEvaluation?.terms ?? [];
   const spellComplete = selectedSpellTerms.length === spellSlots.length;
+  const committedSpellComplete = (committedSpellEvaluation?.terms.length ?? 0) === spellSlots.length;
   const spellAssemblyIndex = spellSlots.findIndex((slot) => !spellChoices[slot]);
   const nextSpellSlot = spellAssemblyIndex >= 0 ? spellSlots[spellAssemblyIndex] : null;
   const activeSynergy = spellEvaluation?.synergy ?? null;
-  const spellReady = spellComplete && (!spellLaw?.synergyRequired || Boolean(activeSynergy));
+  const committedSynergy = committedSpellEvaluation?.synergy ?? null;
+  const spellReady = committedSpellComplete && (!spellLaw?.synergyRequired || Boolean(committedSynergy));
   const synergyMultiplier = spellLaw?.metaTier ? 2 : 1;
   const spellScore = spellEvaluation?.score ?? { force: 0, coherence: 0, resonance: 0 };
   const spellDeficit = spellEvaluation?.deficit ?? 0;
@@ -759,7 +783,7 @@ export default function WorldHome() {
       const from = selectedSpellTerms.find((term) => term.slot === slot);
       if (!from) continue;
       for (const to of spellLaw.terms.filter((term) => term.slot === slot && term.id !== from.id)) {
-        const choices = { ...spellChoices, [slot]: to.id };
+        const choices = { ...displayedSpellChoices, [slot]: to.id };
         const evaluation = evaluateSpellFormula(spellLaw, choices, spellSlots);
         if (evaluation.penalty >= spellEvaluation.penalty) continue;
         if (!spellRepair || evaluation.penalty < spellRepair.evaluation.penalty) {
@@ -818,12 +842,21 @@ export default function WorldHome() {
   const tutorial = selectedChapter.tutorial ?? null;
   const tutorialMilestones = tutorial?.milestones ?? [];
   const tutorialComplete = Boolean(tutorial && tutorialMilestones.every((milestone) => tutorialMarks.includes(milestone.id)));
+  useEffect(() => {
+    if (!tutorialComplete) return;
+    window.localStorage.setItem(chapterCompletionMemoryKey(selectedChapter.id), "complete");
+    setCompletedChapterIds((completed) => completed.includes(selectedChapter.id) ? completed : [...completed, selectedChapter.id]);
+  }, [selectedChapter.id, tutorialComplete]);
   const tutorialCurrent = tutorialMilestones.find((milestone) => !tutorialMarks.includes(milestone.id)) ?? null;
   const tutorialProgress = `${tutorialMarks.length}/${tutorialMilestones.length}`;
   const chapterFinaleReady = selectedChapter.finale.trigger === "TUTORIAL_MASTERY"
     ? tutorialComplete
     : Boolean(journey?.chapterConflict);
   const chapterFinaleKey = `${selectedChapter.id}:${selectedChapter.finale.trigger}`;
+  const isChapterUnlocked = (chapterId: string) => {
+    const chapter = getStoryChapter(chapterId);
+    return STORY_CHAPTERS.filter((candidate) => candidate.order < chapter.order).every((candidate) => completedChapterIds.includes(candidate.id));
+  };
   const menuProgress = tutorial
     ? `${tutorialProgress} МЕХАНИК`
     : `ШАГИ ПО ДОРОГЕ ${journey?.roadBricks ?? 0} · РУБЕЖ ${journey?.castleDistance ?? 12}`;
@@ -849,7 +882,7 @@ export default function WorldHome() {
     : status === "awaiting_tick"
     ? `НАКОПИТЬ ТИК ${nextTick}`
     : status === "awaiting_spell"
-      ? spellReady ? `СДЕЛАТЬ ШАГ ПО ДОРОГЕ ${world?.pendingTick ?? nextTick}` : spellLaw?.synergyRequired && !activeSynergy ? "СОЗДАЙТЕ СИНЕРГИЮ" : "СОБЕРИТЕ ФОРМУЛУ"
+      ? spellReady ? `СДЕЛАТЬ ШАГ ПО ДОРОГЕ ${world?.pendingTick ?? nextTick}` : spellLaw?.synergyRequired && committedSpellComplete && !committedSynergy ? "СОЗДАЙТЕ СИНЕРГИЮ" : "СОБЕРИТЕ ФОРМУЛУ"
       : status === "awaiting_defense_roll"
         ? "БРОСИТЬ МНОГООСЕВОЙ КУБ"
         : status === "awaiting_plane"
@@ -1026,10 +1059,10 @@ export default function WorldHome() {
     : battlePhase === "END" || battlePhase === "RESET" ? "COLLAPSE"
     : "STILL";
   const buildingFreshFormula = status === "awaiting_spell" && !spellPerformance;
-  const battleFormulaSource = buildingFreshFormula ? spellChoices.SOURCE ?? "NONE" : spellPerformance?.source ?? lastSpell?.source ?? "NONE";
-  const battleFormulaIntent = buildingFreshFormula ? spellChoices.INTENT ?? "NONE" : spellPerformance?.intent ?? lastSpell?.intent ?? "NONE";
-  const battleFormulaPath = buildingFreshFormula ? spellChoices.PATH ?? "NONE" : spellPerformance?.path ?? lastSpell?.path ?? "NONE";
-  const battleFormulaForm = buildingFreshFormula ? spellChoices.FORM ?? "DORMANT" : spellPerformance?.form ?? lastSpell?.form ?? "DORMANT";
+  const battleFormulaSource = buildingFreshFormula ? displayedSpellChoices.SOURCE ?? "NONE" : spellPerformance?.source ?? lastSpell?.source ?? "NONE";
+  const battleFormulaIntent = buildingFreshFormula ? displayedSpellChoices.INTENT ?? "NONE" : spellPerformance?.intent ?? lastSpell?.intent ?? "NONE";
+  const battleFormulaPath = buildingFreshFormula ? displayedSpellChoices.PATH ?? "NONE" : spellPerformance?.path ?? lastSpell?.path ?? "NONE";
+  const battleFormulaForm = buildingFreshFormula ? displayedSpellChoices.FORM ?? "DORMANT" : spellPerformance?.form ?? lastSpell?.form ?? "DORMANT";
   const battleFormulaSynergy = buildingFreshFormula ? activeSynergy?.id ?? "NONE" : spellPerformance?.synergy ?? lastSpell?.synergy ?? "NONE";
   const battleFormulaNodes = [
     ["SOURCE", battleFormulaSource],
@@ -1049,10 +1082,10 @@ export default function WorldHome() {
   const liveFormulaIndividual: FormulaIndividualModel = {
     identity: world?.living.identity ?? seed,
     tick: world?.pendingTick ?? nextTick,
-    source: spellChoices.SOURCE ?? "NONE",
-    intent: spellChoices.INTENT ?? "NONE",
-    path: spellChoices.PATH ?? "NONE",
-    form: spellLaw?.formRequired ? spellChoices.FORM ?? "NONE" : "DORMANT",
+    source: displayedSpellChoices.SOURCE ?? "NONE",
+    intent: displayedSpellChoices.INTENT ?? "NONE",
+    path: displayedSpellChoices.PATH ?? "NONE",
+    form: spellLaw?.formRequired ? displayedSpellChoices.FORM ?? "NONE" : "DORMANT",
     synergy: activeSynergy?.id ?? "NONE",
     topology: spellLaw?.lexiconVariant ?? 0,
     complexity: spellLaw?.complexity ?? 1,
@@ -1102,7 +1135,7 @@ export default function WorldHome() {
       intent: spellChoices.INTENT,
       path: spellChoices.PATH,
       form: spellLaw?.formRequired ? spellChoices.FORM ?? "DORMANT" : "DORMANT",
-      synergy: activeSynergy?.id ?? "NONE",
+      synergy: committedSynergy?.id ?? "NONE",
       verdict: "RUNNING",
     });
     setSpellResolution(null);
@@ -1112,7 +1145,7 @@ export default function WorldHome() {
       path: spellChoices.PATH,
       form: spellLaw?.formRequired ? spellChoices.FORM ?? "DORMANT" : "DORMANT",
     });
-  }, [actWorld, activeSynergy?.id, liveFormulaIndividual, spellChoices, spellLaw?.formRequired]);
+  }, [actWorld, committedSynergy?.id, liveFormulaIndividual, spellChoices, spellLaw?.formRequired]);
   const triggerFieldReaction = useCallback(() => {
     if (!reactionPending || actionDisabled) return;
     void actWorld("world_reaction");
@@ -1125,11 +1158,12 @@ export default function WorldHome() {
   }, [triggerFieldReaction]);
 
   const selectChapter = useCallback((chapterId: string) => {
+    if (!isChapterUnlocked(chapterId)) return;
     const chapter = getStoryChapter(chapterId);
     setSelectedChapterId(chapter.id);
     window.localStorage.setItem(ACTIVE_CHAPTER_MEMORY_KEY, chapter.id);
     emitSoundCue("MENU_SELECT");
-  }, []);
+  }, [completedChapterIds]);
 
   const advanceStory = useCallback(() => {
     setStoryPlayback((playback) => {
@@ -1224,8 +1258,8 @@ export default function WorldHome() {
           <nav className="game-menu-actions" aria-label="Главное меню">
             <div className="game-menu-chapters" role="list" aria-label="Доступные главы">
               {STORY_CHAPTERS.map((chapter) => (
-                <button key={chapter.id} type="button" role="listitem" data-active={chapter.id === selectedChapter.id} onClick={() => selectChapter(chapter.id)}>
-                  <span>{String(chapter.order).padStart(2, "0")} / ГЛАВА {chapter.numeral}</span><b>{chapter.publication.label}</b><small>{chapter.title}</small>
+                <button key={chapter.id} type="button" role="listitem" data-active={chapter.id === selectedChapter.id} data-locked={!isChapterUnlocked(chapter.id)} disabled={!isChapterUnlocked(chapter.id)} aria-label={isChapterUnlocked(chapter.id) ? `Глава ${chapter.numeral}: ${chapter.title}` : `Глава ${chapter.numeral} закрыта до прохождения предыдущей`} onClick={() => selectChapter(chapter.id)}>
+                  <span>{String(chapter.order).padStart(2, "0")} / ГЛАВА {chapter.numeral}</span><b>{isChapterUnlocked(chapter.id) ? chapter.publication.label : "ЗАКРЫТА ◇"}</b><small>{isChapterUnlocked(chapter.id) ? chapter.title : "ПРОЙДИТЕ ПРЕДЫДУЩУЮ ГЛАВУ"}</small>
                 </button>
               ))}
             </div>
@@ -1459,6 +1493,9 @@ export default function WorldHome() {
                 </div>
                 <div className="header-combatant header-world" data-state={battleWorldState} data-form={worldForm}>
                   <div><i /><i /><i /><strong>{reactionGlyph}</strong></div>
+                  <output className="reality-world-balance" data-state={balanceState} aria-label={`Главный критерий жизни: баланс ${balanceIndex} из 100; при нуле прохождение проиграно`}>
+                    <small>КРИТЕРИЙ ЖИЗНИ</small><b>⚖ {balanceIndex}</b><span>{balanceLabel} · 0 = ПОРАЖЕНИЕ</span><i><em style={{ width: `${balanceIndex}%` }} /></i>
+                  </output>
                   <i><b style={{ width: `${worldLifePercent}%` }} /></i>
                   <span>МИР · W{worldActor.shield} · HP {worldActor.life}</span>
                 </div>
@@ -1626,6 +1663,8 @@ export default function WorldHome() {
                 </div>
                 <div className="conflict-story"><small>{selectedChapter.finale.kicker}</small><h3 id="chapter-conflict-title">{selectedChapter.finale.title}</h3><p>{selectedChapter.finale.trigger === "TUTORIAL_MASTERY" ? selectedChapter.finale.bodyFallback : journey?.revelation || selectedChapter.finale.bodyFallback}</p><code>{selectedChapter.finale.theorem}</code></div>
                 <footer><span>{selectedChapter.finale.consequence}</span><button type="button" onClick={() => {
+                  window.localStorage.setItem(chapterCompletionMemoryKey(selectedChapter.id), "complete");
+                  setCompletedChapterIds((completed) => completed.includes(selectedChapter.id) ? completed : [...completed, selectedChapter.id]);
                   setDismissedChapterFinale(chapterFinaleKey);
                   if (selectedChapter.finale.exit === "CHAPTER_MENU") {
                     setStoryPlayback(null);
@@ -1643,18 +1682,19 @@ export default function WorldHome() {
                 data-topology={spellLaw.lexiconVariant}
                 data-quality={spellQuality.state}
                 data-complete={spellComplete}
+                data-previewing={Boolean(spellPreview)}
               >
                 <header><span>ИЗУМРУДНАЯ КНИГА / ТИК {world?.pendingTick}</span><b>{spellComplete ? "ФОРМУЛА СОБРАНА" : `РУНА ${selectedSpellTerms.length + 1} / ${spellSlots.length}`}</b></header>
                 <div className="spell-builder-title">
-                  <small>{spellComplete ? `ТОПОЛОГИЯ ${SPELL_TOPOLOGIES[spellLaw.lexiconVariant]} · META ${spellLaw.metaTier}` : "ОДИН ВЫБОР — ОДНО ИЗМЕНЕНИЕ ЖИВОЙ ПЕЧАТИ"}</small>
+                  <small>{spellPreview ? "ПРЕДПРОСМОТР · КЛИК — ЗАКРЕПИТЬ" : spellComplete ? `ТОПОЛОГИЯ ${SPELL_TOPOLOGIES[spellLaw.lexiconVariant]} · META ${spellLaw.metaTier}` : "ОДИН ВЫБОР — ОДНО ИЗМЕНЕНИЕ ЖИВОЙ ПЕЧАТИ"}</small>
                   <h3 id="spell-builder-title">{spellComplete ? "ПЕЧАТЬ ГОТОВА К ПРОЕКЦИИ" : `ВЫБЕРИТЕ: ${nextSpellSlot ? SPELL_SLOT_META[nextSpellSlot].label : "РУНУ"}`}</h3>
-                  <p>{spellPhrase || "СИЛА ЕЩЁ НЕ ИМЕЕТ ФОРМЫ"}</p>
+                  <p aria-live="polite">{spellPhrase || "СИЛА ЕЩЁ НЕ ИМЕЕТ ФОРМЫ"}</p>
                   <div
                     className="spell-loom"
-                    data-source={spellChoices.SOURCE ?? "EMPTY"}
-                    data-intent={spellChoices.INTENT ?? "EMPTY"}
-                    data-path={spellChoices.PATH ?? "EMPTY"}
-                    data-form={spellLaw.formRequired ? spellChoices.FORM ?? "EMPTY" : "DORMANT"}
+                    data-source={displayedSpellChoices.SOURCE ?? "EMPTY"}
+                    data-intent={displayedSpellChoices.INTENT ?? "EMPTY"}
+                    data-path={displayedSpellChoices.PATH ?? "EMPTY"}
+                    data-form={spellLaw.formRequired ? displayedSpellChoices.FORM ?? "EMPTY" : "DORMANT"}
                     data-synergy={activeSynergy?.id ?? "NONE"}
                   >
                     <FormulaIndividual key={spellBindPulse} model={liveFormulaIndividual} phase="FORMULA" className="spell-sigil" />
@@ -1688,7 +1728,17 @@ export default function WorldHome() {
                   <span data-active={spellLaw.synergyRequired}><i>Ⅲ</i><b>СИНЕРГИЯ</b><small>{spellLaw.synergyRequired ? "обязательна" : "шаг 8"}</small></span>
                   <strong>◇ META {spellLaw.metaTier ? "×2" : "LOCK"}</strong>
                 </div>
-                <div className="spell-rows" data-complexity={spellLaw.complexity}>
+                <div
+                  className="spell-rows"
+                  data-complexity={spellLaw.complexity}
+                  onClickCapture={(event) => {
+                    const rune = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-slot][data-term]");
+                    if (!rune || !event.currentTarget.contains(rune)) return;
+                    const runeSlot = rune.dataset.slot as SpellSlot | undefined;
+                    const termId = rune.dataset.term;
+                    if (runeSlot && termId) bindSpellTerm(runeSlot, termId);
+                  }}
+                >
                   {spellSlots.map((slot, row) => (
                     <fieldset
                       key={slot}
@@ -1702,9 +1752,15 @@ export default function WorldHome() {
                           type="button"
                           key={term.id}
                           data-selected={spellChoices[slot] === term.id}
+                          data-preview={spellPreview?.slot === slot && spellPreview.termId === term.id}
+                          data-slot={slot}
                           data-term={term.id}
+                          aria-pressed={spellChoices[slot] === term.id}
                           aria-label={`${term.phrase}; сила ${term.force}, связность ${term.coherence}, резонанс ${term.resonance}`}
-                          onClick={() => bindSpellTerm(slot, term.id)}
+                          onPointerEnter={() => setSpellPreview({ slot, termId: term.id })}
+                          onPointerLeave={() => setSpellPreview((current) => current?.slot === slot && current.termId === term.id ? null : current)}
+                          onFocus={() => setSpellPreview({ slot, termId: term.id })}
+                          onBlur={() => setSpellPreview((current) => current?.slot === slot && current.termId === term.id ? null : current)}
                         >
                           <i className="spell-term-glyph" aria-hidden="true">{SPELL_TERM_GLYPHS[term.id] ?? "◇"}</i><span>{term.id}</span><b>{term.phrase}</b><small>F{term.force} · C{term.coherence} · R{term.resonance}</small>
                         </button>
@@ -1729,7 +1785,7 @@ export default function WorldHome() {
                   <div><span>ИЗУМРУДНЫЙ ПРОВОДНИК / ПРОЕКЦИЯ · НЕ ВЕРДИКТ</span><b>{spellGuide.title}</b><small>{spellGuide.detail}</small></div>
                   {spellRepair && <button type="button" onClick={() => bindSpellTerm(spellRepair!.slot, spellRepair!.to.id)}><span>ПРИМЕНИТЬ 1 ЗАМЕНУ</span><b>{SPELL_TERM_GLYPHS[spellRepair.to.id] ?? "◇"}</b></button>}
                 </section>}
-                {spellProjected && <div className="spell-projection"><span>A → B / Mor<sub>I</sub></span><code>{`Spell { source=${spellChoices.SOURCE ?? "?"}, intent=${spellChoices.INTENT ?? "?"}, path=${spellChoices.PATH ?? "?"}, form=${spellLaw.formRequired ? spellChoices.FORM ?? "?" : "DORMANT"}, synergy=${activeSynergy?.id ?? "NONE"} }`}</code><small>identity′ = identity · rank′ = rank + 1 · certificate′ = certificate + 1</small></div>}
+                {spellProjected && <div className="spell-projection"><span>A → B / Mor<sub>I</sub></span><code>{`Spell { source=${displayedSpellChoices.SOURCE ?? "?"}, intent=${displayedSpellChoices.INTENT ?? "?"}, path=${displayedSpellChoices.PATH ?? "?"}, form=${spellLaw.formRequired ? displayedSpellChoices.FORM ?? "?" : "DORMANT"}, synergy=${activeSynergy?.id ?? "NONE"} }`}</code><small>identity′ = identity · rank′ = rank + 1 · certificate′ = certificate + 1</small></div>}
                 {world?.spell?.last?.outcome === "HOLD" && <div className="spell-hold"><b>HOLD / ФОРМУЛА УДЕРЖАНА</b><span>{!world.spell.last.forceOk && "F "}{!world.spell.last.coherenceOk && "C "}{!world.spell.last.resonanceOk && "R "}{spellLaw.formRequired && world.spell.last.form === "DORMANT" && "⬡ "}{spellLaw.synergyRequired && world.spell.last.synergy === "NONE" && "⊗"}</span><small>Значки показывают несовпавший канал. Измените одну руну; дорога и заклятие не сдвинулись.</small></div>}
                 {spellComplete && <footer data-complete="true"><button type="button" onClick={() => setSpellProjected((value) => !value)}><span>{spellProjected ? "СКРЫТЬ МАТЕМАТИКУ" : "ПОКАЗАТЬ МАТЕМАТИКУ"}</span><b>λ</b></button><button type="button" disabled={!spellReady || busy} onClick={castConfiguredSpell}><span>{busy ? "LEAN СЧИТАЕТ…" : "ПРОВЕРИТЬ И СОТВОРИТЬ"}</span><b>→ ▰</b></button></footer>}
               </section>

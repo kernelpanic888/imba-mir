@@ -28,6 +28,10 @@ export function tutorialMemoryKey(chapter: StoryChapterDefinition): string {
   return `imba:tutorial:${chapter.id}:v${chapter.tutorial?.memoryVersion ?? 1}`;
 }
 
+export function chapterCompletionMemoryKey(chapterId: string): string {
+  return `imba:story:${chapterId}:complete:v1`;
+}
+
 function assertStoryRegistry(chapters: readonly StoryChapterDefinition[]): void {
   const chapterIds = new Set<string>();
   for (const chapter of chapters) {

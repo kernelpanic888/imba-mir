@@ -1,6 +1,6 @@
 # Imba interface
 
-Current release: **0.1.2**. See the [release journal](CHANGELOG.md).
+Current release: **0.1.3**. See the [release journal](CHANGELOG.md).
 
 Local graphical interface for the single-square Imba World. It sends player
 actions to the Python HTTP bridge on `127.0.0.1:8765`; the bridge delegates
