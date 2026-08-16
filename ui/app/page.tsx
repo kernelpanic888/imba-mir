@@ -1232,7 +1232,10 @@ export default function WorldHome() {
             </div>
             <div className="menu-journey-layer">
               <div className="menu-green-road"><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
-              <img className="game-menu-raven" src="/hero-crow-v2.webp" alt="" width={1024} height={683} decoding="async" />
+              <div className="game-menu-raven" aria-hidden="true">
+                <img src="/hero-crow-v2.webp" alt="" width={1024} height={683} decoding="async" />
+                <i className="menu-raven-eye" />
+              </div>
               <img className="game-menu-shadow" src="/hero-shadow-v1.webp" alt="" width={1024} height={683} decoding="async" />
               <span className="menu-boundary-signal"><i />Sh(D) ⇄ R<sub>D</sub></span>
             </div>

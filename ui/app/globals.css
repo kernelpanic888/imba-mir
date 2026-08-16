@@ -1460,7 +1460,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
   transform: translateX(-50%);
   animation: menu-castle-beacon 5.5s ease-in-out infinite;
 }
-.menu-journey-layer { z-index: 3; }
+.menu-journey-layer { z-index: 8; }
 .menu-green-road {
   position: absolute;
   left: 17%;
@@ -1504,20 +1504,45 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
   position: absolute;
   bottom: -5%;
   height: 56%;
-  object-fit: contain;
-  object-position: center bottom;
-  mix-blend-mode: screen;
 }
 .game-menu-raven {
   left: 8%;
   width: min(31vw,440px);
-  opacity: .74;
-  filter: saturate(1.08) contrast(1.14) brightness(.82) drop-shadow(0 0 24px rgba(67,186,132,.32));
+  z-index: 4;
+  isolation: isolate;
+  opacity: .98;
+  filter: saturate(1.24) contrast(1.12) brightness(1.18) drop-shadow(0 0 8px rgba(225,255,218,.48)) drop-shadow(0 0 28px rgba(67,186,132,.58)) drop-shadow(0 0 58px rgba(0,255,153,.2));
+}
+.game-menu-raven > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  mix-blend-mode: screen;
+}
+.menu-raven-eye {
+  position: absolute;
+  z-index: 2;
+  left: 80.5%;
+  top: 9.8%;
+  width: 3.4%;
+  height: 2.7%;
+  border-radius: 50%;
+  background: rgba(0,14,8,.95);
+  box-shadow: 0 0 2px rgba(0,0,0,.9),0 0 7px rgba(225,255,218,.36);
+  opacity: 0;
+  transform-origin: 50% 50%;
+  animation: menu-raven-blink 8.2s steps(1,end) infinite;
 }
 .game-menu-shadow {
+  z-index: 2;
   right: 18%;
   width: min(29vw,410px);
   opacity: .36;
+  object-fit: contain;
+  object-position: center bottom;
+  mix-blend-mode: screen;
   transform: scaleX(-1);
   filter: saturate(.94) hue-rotate(24deg) brightness(.92) contrast(1.08) drop-shadow(0 0 30px rgba(145,135,199,.38));
   animation: menu-shadow-presence 9s ease-in-out infinite alternate;
@@ -1665,6 +1690,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
 @keyframes menu-road-breathe { from { filter: brightness(.75); } to { filter: brightness(1.06); } }
 @keyframes menu-road-current { from { top: -34%; } to { top: 112%; } }
 @keyframes menu-shadow-presence { from { transform: scaleX(-1) translateX(0); opacity: .16; } to { transform: scaleX(-1) translateX(-8px); opacity: .27; } }
+@keyframes menu-raven-blink { 0%,87%,91%,100% { opacity: 0; transform: scaleY(0); } 88%,90% { opacity: .92; transform: scaleY(1); } 89% { opacity: 1; transform: scaleY(.42); } }
 
 @media (min-width: 721px) and (max-width: 1440px) and (min-height: 641px) and (max-height: 900px) {
   .game-menu { grid-template-columns: minmax(0,1.15fr) minmax(360px,.85fr); padding: 22px 38px; gap: 22px; }
@@ -1685,7 +1711,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
   .menu-castle-layer > img { bottom: 42%; width: 86vw; height: 34vh; opacity: .56; }
   .menu-castle-layer > i { bottom: 43%; width: 58vw; }
   .menu-green-road { left: -14%; right: -14%; top: 49%; bottom: -12%; }
-  .game-menu-raven { left: -8%; bottom: 18%; width: 48vw; height: 34%; opacity: .52; }
+  .game-menu-raven { left: -8%; bottom: 18%; width: 48vw; height: 34%; opacity: .86; }
   .game-menu-shadow { right: -7%; bottom: 17%; width: 45vw; height: 32%; opacity: .16; }
   .menu-boundary-signal { bottom: 23%; }
   .game-menu-copy { align-self: end; padding: 0; }
@@ -2100,6 +2126,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
   .menu-green-road,
   .menu-green-road::before,
   .game-menu-shadow,
+  .menu-raven-eye,
   .menu-boundary-signal > i,
   .story-prologue::after,
   .prologue-boundary i,
