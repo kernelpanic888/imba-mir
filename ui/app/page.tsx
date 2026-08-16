@@ -465,7 +465,7 @@ function observedTutorialMechanics(world: WorldState): TutorialObservation[] {
 }
 
 export default function WorldHome() {
-  const [locale, setLocale] = useState<Locale>("ru");
+  const [locale, setLocale] = useState<Locale>("en");
   const [world, setWorld] = useState<WorldState | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1257,11 +1257,13 @@ export default function WorldHome() {
           </div>
           <nav className="game-menu-actions" aria-label="Главное меню">
             <div className="game-menu-chapters" role="list" aria-label="Доступные главы">
-              {STORY_CHAPTERS.map((chapter) => (
-                <button key={chapter.id} type="button" role="listitem" data-active={chapter.id === selectedChapter.id} data-locked={!isChapterUnlocked(chapter.id)} disabled={!isChapterUnlocked(chapter.id)} aria-label={isChapterUnlocked(chapter.id) ? `Глава ${chapter.numeral}: ${chapter.title}` : `Глава ${chapter.numeral} закрыта до прохождения предыдущей`} onClick={() => selectChapter(chapter.id)}>
-                  <span>{String(chapter.order).padStart(2, "0")} / ГЛАВА {chapter.numeral}</span><b>{isChapterUnlocked(chapter.id) ? chapter.publication.label : "ЗАКРЫТА ◇"}</b><small>{isChapterUnlocked(chapter.id) ? chapter.title : "ПРОЙДИТЕ ПРЕДЫДУЩУЮ ГЛАВУ"}</small>
-                </button>
-              ))}
+              {STORY_CHAPTERS.map((chapter) => {
+                const unlocked = isChapterUnlocked(chapter.id);
+                const chapterWord = locale === "en" ? "CHAPTER" : "ГЛАВА";
+                return <button key={chapter.id} type="button" role="listitem" data-active={chapter.id === selectedChapter.id} data-locked={!unlocked} disabled={!unlocked} aria-label={unlocked ? `${chapterWord} ${chapter.numeral}: ${chapter.title}` : locale === "en" ? `Chapter ${chapter.numeral} is locked until the previous chapter is completed` : `Глава ${chapter.numeral} закрыта до прохождения предыдущей`} onClick={() => selectChapter(chapter.id)}>
+                  <span>{String(chapter.order).padStart(2, "0")} / {chapterWord} {chapter.numeral}</span><b>{unlocked ? chapter.publication.label : locale === "en" ? "LOCKED ◇" : "ЗАКРЫТА ◇"}</b><small>{unlocked ? chapter.title : locale === "en" ? "COMPLETE THE PREVIOUS CHAPTER" : "ПРОЙДИТЕ ПРЕДЫДУЩУЮ ГЛАВУ"}</small>
+                </button>;
+              })}
             </div>
             <div className="author-frontier"><span>ОПУБЛИКОВАНО 0—1</span><b>ДАЛЬШЕ — ТОЛЬКО ПОСЛЕ АВТОРА</b></div>
             <button type="button" className="menu-primary" onClick={continueWorld} disabled={!connected}>

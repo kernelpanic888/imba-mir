@@ -8,6 +8,7 @@
 **Author:** [Aleksey Salkutsan](AUTHORS.md)  
 **Source release:** `v0.1.3`
 **Repository:** [github.com/kernelpanic888/imba-mir](https://github.com/kernelpanic888/imba-mir)
+**Play:** [Open the hosted game](https://imba-mir-aleksey.kernelpanic888.chatgpt.site/)
 **Categories:** Video game · Mathematics · Lean 4 formal methods
 
 Imba is a one-player game about building an unbounded stack in one square

@@ -21,22 +21,22 @@ test("server-renders the Imba game shell", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Imba — Один тик, один Мир<\/title>/i);
+  assert.match(html, /<title>IMBA \/ MIR — One Tick, One World<\/title>/i);
   assert.match(html, /IMBA/);
-  assert.match(html, /ИГРОК ← ДОМЕН → ЖИВОЙ МИР/);
-  assert.match(html, /Игрок слева против живого Мира справа/);
-  assert.match(html, /ЖИЗНЬ ИГРОКА/);
-  assert.match(html, /ЖИЗНЬ МИРА/);
-  assert.match(html, /СОБЫТИЯ МИРА \/ КОМПЕНСАЦИЯ/);
-  assert.match(html, /НАКОПИТЬ ТИК/);
-  assert.match(html, /ШАГИ ПО ДОРОГЕ/i);
-  assert.match(html, /ОСТАТОК ЗАКЛЯТИЯ/i);
-  assert.match(html, /Путь ворона к Изумрудному замку/i);
-  assert.match(html, /ОТВЕТЫ МИРА/);
-  assert.match(html, /СРЕЗ РЕАЛЬНОСТИ/);
-  assert.match(html, /ФОРМА → НАБЛЮДАЕМОЕ/);
-  assert.match(html, /НАБЛЮДАЕМОЕ → МИР/);
-  assert.match(html, /Тень/i);
+  assert.match(html, /PLAYER ← DOMAIN → LIVING WORLD/);
+  assert.match(html, /Player on the left and living World on the right/);
+  assert.match(html, /PLAYER LIFE/);
+  assert.match(html, /WORLD LIFE/);
+  assert.match(html, /WORLD EVENTS \/ COMPENSATION/);
+  assert.match(html, /ACCUMULATE TICK/);
+  assert.match(html, /ROAD STEPS/i);
+  assert.match(html, /CURSE REMAINING/i);
+  assert.match(html, /road to the Emerald Castle/i);
+  assert.match(html, /WORLD RESPONSES/);
+  assert.match(html, /REALITY SLICE/);
+  assert.match(html, /FORM → OBSERVABLE/);
+  assert.match(html, /OBSERVABLE → WORLD/);
+  assert.match(html, /Shadow/i);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|Building your site/i);
 });
 
@@ -350,7 +350,9 @@ test("starter preview is fully removed", async () => {
   assert.match(page, /ПРЯМОЕ НАБЛЮДЕНИЕ ЗАПРЕЩЕНО/);
   assert.match(page, /Sh\(D\).*R/);
   assert.doesNotMatch(page, /layers\.slice\(-10\)/);
-  assert.match(layout, /Imba — Один тик, один Мир/);
+  assert.match(layout, /IMBA \/ MIR — One Tick, One World/);
+  assert.match(layout, /<html lang="en">/);
+  assert.match(page, /useState<Locale>\("en"\)/);
   assert.match(layout, /viewportFit:\s*"cover"/);
   assert.match(styles, /html, body\s*\{[^}]*height:\s*100%[^}]*overflow:\s*hidden/s);
   assert.match(styles, /\.world-shell\s*\{[^}]*height:\s*100dvh[^}]*max-height:\s*100dvh[^}]*overflow:\s*hidden/s);

@@ -6,7 +6,7 @@ export const LOCALE_MEMORY_KEY = "imba.locale.v1";
 
 const EN: Record<string, string> = {
   // Menu and common interface
-  "IMBA / МИР": "IMBA / WORLD",
+  "IMBA / МИР": "IMBA / MIR",
   "ГЛАВА": "CHAPTER",
   "ГЛАВА ": "CHAPTER ",
   "ГЛАВНОЕ МЕНЮ": "MAIN MENU",

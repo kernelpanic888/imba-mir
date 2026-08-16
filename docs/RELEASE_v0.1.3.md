@@ -1,33 +1,34 @@
-# IMBA / МИР v0.1.3
+# IMBA / MIR v0.1.3
 
-![IMBA / МИР — Ворон на зелёной дороге](https://raw.githubusercontent.com/kernelpanic888/imba-mir/v0.1.3/docs/assets/imba-mir-cover.png)
+![IMBA / MIR — The Raven on the Green Road](https://raw.githubusercontent.com/kernelpanic888/imba-mir/v0.1.3/docs/assets/imba-mir-cover.png)
 
-Версия `v0.1.3` делает магическую формулу читаемой до её закрепления и
-проясняет главный закон прохождения: Ворон и Мир должны остаться живы, а
-баланс не должен упасть до нуля.
+Version `v0.1.3` makes a formula readable before it is committed and clarifies
+the central rule of the journey: both the Raven and the living World must
+survive, and their balance must never fall to zero.
 
-Это одновременно **video game** и **mathematics software**: игровой Мир
-исполняется через Lean 4, а его допустимые переходы задаются формальными
-определениями и доказуемыми инвариантами.
+IMBA / MIR is both a **video game** and a **mathematics project**. Its World is
+executed through Lean 4, while admissible transitions are governed by formal
+definitions and preserved invariants.
 
-## Главное
+## Highlights
 
-- наведение на руну показывает честный предпросмотр формулы, её индивидуала,
-  F/C/R и будущего действия на Срезе реальности;
-- клик закрепляет выбранную руну, а Lean-проверка использует только
-  закреплённую формулу;
-- баланс вынесен в тело живого Мира и явно обозначен как критерий жизни;
-- следующая глава открывается только после завершения предыдущей;
-- авторское имя унифицировано как **Aleksey Salkutsan**;
-- в репозиторий добавлена каноническая широкоформатная обложка релиза.
+- Hovering or focusing a rune now previews the resulting formula, its unique
+  identity, F/C/R values, and its projected action in the Reality Slice.
+- Clicking commits the selected rune; Lean validation uses committed choices
+  only.
+- Balance is now embodied by the living World and clearly presented as the
+  primary survival condition.
+- Each chapter unlocks only after the preceding chapter has been completed.
+- The author name is consistently presented as **Aleksey Salkutsan**.
+- The canonical widescreen artwork is included in the repository and release.
 
-## Проверка
+## Verification
 
-- UI production build: PASS;
-- UI tests: 2/2 PASS;
-- Lean build: 27/27 PASS;
-- Python tests: 14/14 PASS;
-- protocol and authority audit: PASS.
+- UI production build: PASS
+- UI tests: 2/2 PASS
+- Lean build: 27/27 PASS
+- Python tests: 14/14 PASS
+- Protocol and authority audit: PASS
 
-Живая веб-версия остаётся приватной до отдельного решения автора о публичном
-доступе. Исходный код этого релиза публикуется для чтения, проверки и запуска.
+The hosted game remains private until the author explicitly chooses public
+access. This source release is public for reading, verification, and local use.
