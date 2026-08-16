@@ -1,6 +1,8 @@
 # IMBA / MIR v0.1.3
 
-![IMBA / MIR — The Raven on the Green Road](https://raw.githubusercontent.com/kernelpanic888/imba-mir/v0.1.3/docs/assets/imba-mir-cover.png)
+![IMBA / MIR — The Raven on the Green Road](https://raw.githubusercontent.com/kernelpanic888/imba-mir/main/docs/assets/imba-mir-cover.png)
+
+## [▶ PLAY IMBA / MIR](https://imba-mir-aleksey.kernelpanic888.chatgpt.site/)
 
 Version `v0.1.3` makes a formula readable before it is committed and clarifies
 the central rule of the journey: both the Raven and the living World must

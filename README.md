@@ -1,14 +1,18 @@
-# IMBA / МИР
+# IMBA / MIR
 
-![IMBA / МИР — Ворон на зелёной дороге](docs/assets/imba-mir-cover.png)
+![IMBA / MIR — The Raven on the Green Road](docs/assets/imba-mir-cover.png)
+
+## [▶ PLAY IMBA / MIR](https://imba-mir-aleksey.kernelpanic888.chatgpt.site/)
 
 > Один ворон · одна дорога · живой Мир  
 > One raven · one road · a living World
 
-**Author:** [Aleksey Salkutsan](AUTHORS.md)  
+**Author:** [Aleksey Salkutsan](AUTHORS.md)
+
 **Source release:** `v0.1.3`
+
 **Repository:** [github.com/kernelpanic888/imba-mir](https://github.com/kernelpanic888/imba-mir)
-**Play:** [Open the hosted game](https://imba-mir-aleksey.kernelpanic888.chatgpt.site/)
+
 **Categories:** Video game · Mathematics · Lean 4 formal methods
 
 Imba is a one-player game about building an unbounded stack in one square
