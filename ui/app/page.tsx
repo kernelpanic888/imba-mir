@@ -762,8 +762,11 @@ export default function WorldHome() {
   const committedSpellEvaluation = spellLaw ? evaluateSpellFormula(spellLaw, spellChoices, spellSlots) : null;
   const spellEvaluation = spellLaw ? evaluateSpellFormula(spellLaw, displayedSpellChoices, spellSlots) : null;
   const selectedSpellTerms = spellEvaluation?.terms ?? [];
-  const spellComplete = selectedSpellTerms.length === spellSlots.length;
   const committedSpellComplete = (committedSpellEvaluation?.terms.length ?? 0) === spellSlots.length;
+  // A hover may temporarily complete the *preview*, but only a click is allowed
+  // to change the dialog's topology. Otherwise the rune list disappears under
+  // the pointer and immediately reappears on leave, producing a visual loop.
+  const spellComplete = committedSpellComplete;
   const spellAssemblyIndex = spellSlots.findIndex((slot) => !spellChoices[slot]);
   const nextSpellSlot = spellAssemblyIndex >= 0 ? spellSlots[spellAssemblyIndex] : null;
   const activeSynergy = spellEvaluation?.synergy ?? null;
