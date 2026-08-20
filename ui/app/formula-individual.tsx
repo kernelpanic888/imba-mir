@@ -27,6 +27,7 @@ type FormulaIndividualProps = {
   phase: string;
   className?: string;
   compact?: boolean;
+  locale?: "ru" | "en";
 };
 
 export type FormulaEntityOrgan = {
@@ -42,6 +43,7 @@ type FormulaEntityProps = {
   phase: string;
   organs: FormulaEntityOrgan[];
   className?: string;
+  locale?: "ru" | "en";
 };
 
 type FormulaGeometry = {
@@ -122,13 +124,25 @@ function channelPercent(value: number, need: number): number {
   return Math.max(4, Math.min(100, Math.round(value / need * 100)));
 }
 
-export function FormulaIndividual({ model, phase, className = "", compact = false }: FormulaIndividualProps) {
+export function FormulaIndividual({ model, phase, className = "", compact = false, locale = "ru" }: FormulaIndividualProps) {
   const geometry = formulaIndividualGeometry(model);
   const force = channelPercent(model.score.force, model.need.force);
   const coherence = channelPercent(model.score.coherence, model.need.coherence);
   const resonance = channelPercent(model.score.resonance, model.need.resonance);
   const sourceGlyph = ({ WILL: "▲", SHADOW: "◒", MEMORY: "⧖", SPARK: "✧" } as Record<string, string>)[model.source] ?? "·";
-  const label = [
+  const label = (locale === "en" ? [
+    `Formula individual ${geometry.code}`,
+    `source ${model.source}`,
+    `intention ${model.intent}`,
+    `path ${model.path}`,
+    `form ${model.form}`,
+    `synergy ${model.synergy}`,
+    `channels F${model.score.force} C${model.score.coherence} R${model.score.resonance}`,
+    `requirements F${model.need.force} C${model.need.coherence} R${model.need.resonance}`,
+    `topology ${model.topology}`,
+    `meta ${model.metaTier}`,
+    `quality ${model.quality}`,
+  ] : [
     `Индивидуал формулы ${geometry.code}`,
     `источник ${model.source}`,
     `намерение ${model.intent}`,
@@ -140,7 +154,7 @@ export function FormulaIndividual({ model, phase, className = "", compact = fals
     `топология ${model.topology}`,
     `мета ${model.metaTier}`,
     `качество ${model.quality}`,
-  ].join(", ");
+  ]).join(", ");
 
   return <div
     className={`formula-individual ${compact ? "formula-individual--compact" : ""} ${className}`.trim()}
@@ -185,17 +199,20 @@ const ENTITY_ORGAN_POSITIONS = [
 ] as const;
 
 /** Every accepted rune grows a new organ and changes one living body. */
-export function FormulaEntity({ model, phase, organs, className = "" }: FormulaEntityProps) {
+export function FormulaEntity({ model, phase, organs, className = "", locale = "ru" }: FormulaEntityProps) {
   const geometry = formulaIndividualGeometry(model);
   const born = organs.filter((organ) => organ.filled).length;
   const shell = ENTITY_ORGAN_POSITIONS.map((position, index) => {
     const growth = organs[index]?.filled ? 1 : .23;
     return { x: 50 + (position.x - 50) * growth, y: 50 + (position.y - 50) * growth };
   });
-  const label = `Живая сущность ${geometry.code}: рождено ${born} из ${organs.length} органов. ${organs
+  const organSummary = organs
     .filter((organ) => organ.filled)
     .map((organ) => `${organ.slot} ${organ.term}`)
-    .join(", ") || "ожидает первую руну"}`;
+    .join(", ");
+  const label = locale === "en"
+    ? `Living entity ${geometry.code}: ${born} of ${organs.length} organs born. ${organSummary || "awaiting the first rune"}`
+    : `Живая сущность ${geometry.code}: рождено ${born} из ${organs.length} органов. ${organSummary || "ожидает первую руну"}`;
 
   return <figure
     className={`formula-entity ${className}`.trim()}
@@ -242,7 +259,7 @@ export function FormulaEntity({ model, phase, organs, className = "" }: FormulaE
         })}
       </g>
     </svg>
-    <FormulaIndividual model={model} phase={phase} compact className="formula-entity-heart" />
+    <FormulaIndividual model={model} phase={phase} compact className="formula-entity-heart" locale={locale} />
     <span className="formula-entity-birth" aria-hidden="true">
       {organs.map((organ) => <i key={`birth-${organ.slot}`} data-alive={organ.filled} />)}
     </span>

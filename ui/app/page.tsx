@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { emitSoundCue, SOUND_CUES } from "./sound";
-import { LocalizedTree, LOCALE_MEMORY_KEY, type Locale } from "./i18n";
+import { LocalizedTree, LOCALE_MEMORY_KEY, translateText, type Locale } from "./i18n";
 import { ARCHIVE_GROUPS, AUTHOR_LINKS, AUTHOR_NAME } from "./sources";
 import { FormulaEntity, FormulaIndividual, type FormulaEntityOrgan, type FormulaIndividualModel } from "./formula-individual";
 import {
@@ -1268,7 +1268,7 @@ export default function WorldHome() {
               {STORY_CHAPTERS.map((chapter) => {
                 const unlocked = isChapterUnlocked(chapter.id);
                 const chapterWord = locale === "en" ? "CHAPTER" : "ГЛАВА";
-                return <button key={chapter.id} type="button" role="listitem" data-active={chapter.id === selectedChapter.id} data-locked={!unlocked} disabled={!unlocked} aria-label={unlocked ? `${chapterWord} ${chapter.numeral}: ${chapter.title}` : locale === "en" ? `Chapter ${chapter.numeral} is locked until the previous chapter is completed` : `Глава ${chapter.numeral} закрыта до прохождения предыдущей`} onClick={() => selectChapter(chapter.id)}>
+                return <button key={chapter.id} type="button" role="listitem" data-active={chapter.id === selectedChapter.id} data-locked={!unlocked} disabled={!unlocked} aria-label={unlocked ? `${chapterWord} ${chapter.numeral}: ${translateText(locale, chapter.title)}` : locale === "en" ? `Chapter ${chapter.numeral} is locked until the previous chapter is completed` : `Глава ${chapter.numeral} закрыта до прохождения предыдущей`} onClick={() => selectChapter(chapter.id)}>
                   <span>{String(chapter.order).padStart(2, "0")} / {chapterWord} {chapter.numeral}</span><b>{unlocked ? chapter.publication.label : locale === "en" ? "LOCKED ◇" : "ЗАКРЫТА ◇"}</b><small>{unlocked ? chapter.title : locale === "en" ? "COMPLETE THE PREVIOUS CHAPTER" : "ПРОЙДИТЕ ПРЕДЫДУЩУЮ ГЛАВУ"}</small>
                 </button>;
               })}
@@ -1493,12 +1493,12 @@ export default function WorldHome() {
                     {battleFormulaNodes.map(([slot, term], index) => <span key={slot} data-filled={term !== "NONE" && term !== "DORMANT"} data-current={status === "awaiting_spell" && slot !== "SYNERGY" && nextSpellSlot === slot}><i>{slot === "SYNERGY" ? SYNERGY_GLYPHS[term] ?? "○" : SPELL_TERM_GLYPHS[term] ?? String(index + 1)}</i><small>{slot === "SYNERGY" ? "⊗" : slot.slice(0, 1)}</small></span>)}
                   </div>
                   <div className="header-action-track">
-                    <FormulaEntity model={realityFormulaIndividual} phase={battlePhase} organs={formulaEntityOrgans} className="header-formula-entity" />
+                    <FormulaEntity model={realityFormulaIndividual} phase={battlePhase} organs={formulaEntityOrgans} className="header-formula-entity" locale={locale} />
                     <code className="header-formula-metrics">F{realityFormulaIndividual.score.force} · C{realityFormulaIndividual.score.coherence} · R{realityFormulaIndividual.score.resonance}</code>
                     <i className="header-green-road"><b /><b /><b /><b /><b /></i>
                     <i className="header-raven-guard"><b /></i>
                     <i className="header-magic-form header-magic-form--individual" aria-hidden="true">
-                      <FormulaIndividual model={realityFormulaIndividual} phase={battlePhase} compact className="header-moving-individual" />
+                      <FormulaIndividual model={realityFormulaIndividual} phase={battlePhase} compact className="header-moving-individual" locale={locale} />
                       <b /><b />
                     </i>
                     <i className="header-world-force"><b /><b /></i>
@@ -1712,7 +1712,7 @@ export default function WorldHome() {
                     data-form={spellLaw.formRequired ? displayedSpellChoices.FORM ?? "EMPTY" : "DORMANT"}
                     data-synergy={activeSynergy?.id ?? "NONE"}
                   >
-                    <FormulaIndividual key={spellBindPulse} model={liveFormulaIndividual} phase="FORMULA" className="spell-sigil" />
+                    <FormulaIndividual key={spellBindPulse} model={liveFormulaIndividual} phase="FORMULA" className="spell-sigil" locale={locale} />
                     <div className="spell-bind-chain">
                       {spellSlots.map((slot, index) => {
                         const term = selectedTermFor(slot);

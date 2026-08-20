@@ -230,6 +230,15 @@ test("starter preview is fully removed", async () => {
   assert.match(formulaIndividual, /formula-entity-organ/);
   assert.match(formulaIndividual, /data-born/);
   assert.match(formulaIndividual, /Живая сущность/);
+  assert.match(formulaIndividual, /locale === "en"/);
+  assert.match(formulaIndividual, /Formula individual/);
+  assert.match(formulaIndividual, /Living entity/);
+  assert.match(i18n, /"КРИТЕРИЙ ЖИЗНИ": "LIFE CRITERION"/);
+  assert.match(i18n, /"ПРОВОДНИК ОБУЧЕНИЯ ·": "TUTORIAL GUIDE ·"/);
+  assert.match(i18n, /"· ЗАКЛЯТИЕ": "· CURSE"/);
+  assert.match(i18n, /"β ЩИТ": "β SHIELD"/);
+  assert.match(i18n, /Main life criterion/);
+  assert.match(i18n, /The Raven’s road to the Emerald Castle/);
   assert.match(page, /realityFormulaIndividual/);
   assert.match(page, /liveFormulaIndividual/);
   assert.match(page, /header-formula-metrics/);
