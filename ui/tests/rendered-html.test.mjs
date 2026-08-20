@@ -26,6 +26,43 @@ async function publicApiWithoutRuntime() {
   );
 }
 
+function aggregateMetricDb(recordedKeys) {
+  return {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async run() {
+              assert.match(sql, /INSERT INTO author_metrics/);
+              recordedKeys.push(values[0]);
+            },
+          };
+        },
+      };
+    },
+    async batch(statements) {
+      for (const statement of statements) await statement.run();
+    },
+  };
+}
+
+async function proxyWithMetrics(request, recordedKeys) {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("metric-test", `${process.pid}-${Date.now()}-${Math.random()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const pending = [];
+  const response = await worker.fetch(request, {
+    ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+    DB: aggregateMetricDb(recordedKeys),
+    IMBA_API_ORIGIN: "https://runtime.example.test",
+  }, {
+    waitUntil(promise) { pending.push(promise); },
+    passThroughOnException() {},
+  });
+  await Promise.all(pending);
+  return response;
+}
+
 test("server-renders the Imba game shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);
@@ -58,6 +95,62 @@ test("public API fails honestly when the Lean runtime is not configured", async 
     ok: false,
     error: "The public Lean runtime is not configured yet.",
   });
+});
+
+test("records owner-only aggregate launches and players without exposing a counter", async () => {
+  const recordedKeys = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (request) => {
+    const url = new URL(request.url);
+    if (url.pathname === "/api/state") {
+      return Response.json(
+        { ok: true, state: {} },
+        { headers: { "Set-Cookie": "imba_session=runtime-session; Path=/; HttpOnly" } },
+      );
+    }
+    return Response.json({ ok: true, state: {} });
+  };
+
+  try {
+    await proxyWithMetrics(
+      new Request("https://game.example.test/api/state"),
+      recordedKeys,
+    );
+    const firstAction = await proxyWithMetrics(
+      new Request("https://game.example.test/api/action", {
+        method: "POST",
+        headers: { cookie: "imba_session=runtime-session" },
+        body: "{}",
+      }),
+      recordedKeys,
+    );
+    assert.match(firstAction.headers.get("set-cookie") ?? "", /imba_counted_player=1/);
+
+    await proxyWithMetrics(
+      new Request("https://game.example.test/api/action", {
+        method: "POST",
+        headers: { cookie: "imba_session=runtime-session; imba_counted_player=1" },
+        body: "{}",
+      }),
+      recordedKeys,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(recordedKeys, [
+    "launches_total",
+    "actions_total",
+    "players_approx",
+    "actions_total",
+  ]);
+
+  const [page, workerSource] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("worker/index.ts", root), "utf8"),
+  ]);
+  assert.doesNotMatch(page, /players_approx|launches_total|actions_total|author_metrics/);
+  assert.doesNotMatch(workerSource, /\/api\/author\/stats/);
 });
 
 test("starter preview is fully removed", async () => {
