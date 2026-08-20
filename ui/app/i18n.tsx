@@ -630,6 +630,8 @@ const DYNAMIC: Array<[RegExp, string | ((...matches: string[]) => string)]> = [
   [/^Одна замена: «(.+)» → «(.+)»\. Каналы станут F(\d+) · C(\d+) · R(\d+)\.$/u, (_all, from, to, force, coherence, resonance) => `One replacement: “${translateText("en", from)}” → “${translateText("en", to)}”. Channels become F${force} · C${coherence} · R${resonance}.`],
   [/^МАГИЯ ИДЁТ К МИРУ: (.+)$/u, (_all, detail) => `MAGIC MOVES TOWARD THE WORLD: ${detail}`],
   [/^КОНТАКТ С МИРОМ: (.+)$/u, (_all, detail) => `CONTACT WITH THE WORLD: ${detail}`],
+  [/^Шаги по дороге (\d+); рубеж R(\d+); заклятие (\d+)\/(\d+)\. Волшебник насылает: (.+)\.$/u, (_all, steps, threshold, remaining, total, trouble) => `Road steps ${steps}; threshold R${threshold}; curse ${remaining}/${total}. The Wizard sends: ${translateText("en", trouble)}.`],
+  [/^Заклинание допущено с объявленной ценой: напряжение \+(\d+)\.$/u, (_all, cost) => `The spell was admitted at the declared cost: tension +${cost}.`],
   [/^Основной сайт автора (.+)$/u, (_all, author) => `Author’s main site: ${author}`],
   [/^Главный критерий жизни: баланс (\d+) из 100; при нуле прохождение проиграно$/u, (_all, value) => `Main life criterion: balance ${value} out of 100; reaching zero ends the run`],
   [/^Баланс (\d+) из 100\. Формула: минимальная доля жизни минус половина разрыва между сторонами\.$/u, (_all, value) => `Balance ${value} out of 100. Formula: the lower life ratio minus half the gap between both sides.`],

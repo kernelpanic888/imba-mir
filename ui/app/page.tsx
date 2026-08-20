@@ -1474,7 +1474,7 @@ export default function WorldHome() {
                 data-synergy={battleFormulaSynergy}
                 data-projected={spellProjected}
                 data-calculation={calculation?.scene ?? "NONE"}
-                aria-label={`${battlePhaseLabel}: ${battlePhaseDetail}`}
+                aria-label={`${translateText(locale, battlePhaseLabel)}: ${translateText(locale, battlePhaseDetail)}`}
               >
                 <div className="infomagic-wind" aria-hidden="true">
                   <i className="infomagic-current infomagic-current--a"><b>∂D</b><b>Morᵢ</b><b>σ→σ′</b><b>F/C/R</b><b>λ</b><b>Rᴅ</b></i>
@@ -1644,7 +1644,7 @@ export default function WorldHome() {
                   <span>T{String(layer.tick).padStart(2, "0")}</span><b>{layer.name}</b><em>r{layer.rank}</em>
                 </div>
               ))}
-              {status === "awaiting_spell" && <div className="pending-layer"><span>АКТ ЧИСТОГО ТВОРЕНИЯ / ТИК {world?.pendingTick}</span><b>ЗАКЛЯТИЕ → ЗАКЛИНАНИЕ → ШАГ ПО ДОРОГЕ</b><em>ФОРМУЛУ СОБИРАЕТ ИГРОК</em></div>}
+              {status === "awaiting_spell" && <div className="pending-layer"><span>{locale === "en" ? "ACT OF PURE CREATION / TICK" : "АКТ ЧИСТОГО ТВОРЕНИЯ / ТИК"} {world?.pendingTick}</span><b>ЗАКЛЯТИЕ → ЗАКЛИНАНИЕ → ШАГ ПО ДОРОГЕ</b><em>ФОРМУЛУ СОБИРАЕТ ИГРОК</em></div>}
               {reactionPending && <div className="pending-attack"><span>✦ PLAYER / CONTACT / Σ{world?.continuity.pendingAttack?.epoch}</span><b>✦ {world?.continuity.pendingAttack?.payload} ИМПУЛЬСА ▶ ?</b><em>ИЗМЕНЕНИЕ = 0, ПОКА МИР НЕ ОТВЕТИЛ</em></div>}
               {natureActive && world?.interruptedLayer && <div className="interrupted-layer"><span>ВОЗВРАЩАЕТСЯ В ТЕНЬ</span><b>{world.interruptedLayer.name}</b><em>r{world.interruptedLayer.rank}</em></div>}
             </div>
@@ -1699,7 +1699,7 @@ export default function WorldHome() {
                 data-complete={spellComplete}
                 data-previewing={Boolean(spellPreview)}
               >
-                <header><span>ИЗУМРУДНАЯ КНИГА / ТИК {world?.pendingTick}</span><b>{spellComplete ? "ФОРМУЛА СОБРАНА" : `РУНА ${selectedSpellTerms.length + 1} / ${spellSlots.length}`}</b></header>
+                <header><span>{locale === "en" ? "EMERALD BOOK / TICK" : "ИЗУМРУДНАЯ КНИГА / ТИК"} {world?.pendingTick}</span><b>{spellComplete ? "ФОРМУЛА СОБРАНА" : `РУНА ${selectedSpellTerms.length + 1} / ${spellSlots.length}`}</b></header>
                 <div className="spell-builder-title">
                   <small>{spellPreview ? "ПРЕДПРОСМОТР · КЛИК — ЗАКРЕПИТЬ" : spellComplete ? `ТОПОЛОГИЯ ${SPELL_TOPOLOGIES[spellLaw.lexiconVariant]} · META ${spellLaw.metaTier}` : "ОДИН ВЫБОР — ОДНО ИЗМЕНЕНИЕ ЖИВОЙ ПЕЧАТИ"}</small>
                   <h3 id="spell-builder-title">{spellComplete ? "ПЕЧАТЬ ГОТОВА К ПРОЕКЦИИ" : `ВЫБЕРИТЕ: ${nextSpellSlot ? SPELL_SLOT_META[nextSpellSlot].label : "РУНУ"}`}</h3>
