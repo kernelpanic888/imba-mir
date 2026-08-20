@@ -1273,6 +1273,11 @@ export default function WorldHome() {
               })}
             </div>
             <div className="author-frontier"><span>ОПУБЛИКОВАНО 0—1</span><b>ДАЛЬШЕ — ТОЛЬКО ПОСЛЕ АВТОРА</b></div>
+            <a className="game-menu-hosting-note" href={AUTHOR_LINKS[3].href} target="_blank" rel="noreferrer" aria-label="Написать автору и поддержать развитие игры">
+              <i>◌</i>
+              <span><b>ПУБЛИЧНЫЙ ПРОТОТИП · БЕСПЛАТНЫЙ СЕРВЕР</b><small>ПОСЛЕ ПАУЗЫ LEAN-ЯДРУ МОЖЕТ ПОНАДОБИТЬСЯ ДО МИНУТЫ, ЧТОБЫ ПРОСНУТЬСЯ</small></span>
+              <strong>ПОДДЕРЖАТЬ РАЗВИТИЕ — НАПИСАТЬ АВТОРУ ↗</strong>
+            </a>
             <button type="button" className="menu-primary" onClick={continueWorld} disabled={!connected}>
               <span>ПРОДОЛЖИТЬ</span><b>→</b><small>{connected ? `${selectedChapter.runtime.progressLabel} · ${menuProgress}` : "ЯДРО ПРОСЫПАЕТСЯ…"}</small>
             </button>

@@ -3367,6 +3367,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
 /* CHAPTER 0 / author frontier, observed tutorial and human-readable spell guide. */
 .author-frontier { display: flex; justify-content: space-between; gap: 10px; padding: 5px 8px; border-left: 2px solid var(--world-lilac); background: rgba(10,8,24,.44); color: var(--world-dim); font: 800 clamp(6px,.56vw,8px)/1 ui-monospace,monospace; letter-spacing: .08em; }
 .author-frontier b { color: var(--world-lilac); }
+.game-menu-hosting-note { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 6px 9px; border: 1px solid rgba(105,178,176,.25); border-left: 2px solid var(--world-cyan); color: var(--world-dim); background: linear-gradient(90deg,rgba(3,32,23,.86),rgba(7,19,16,.78)); text-decoration: none; }
+.game-menu-hosting-note > i { color: var(--world-cyan); font: normal 950 16px/1 ui-monospace,monospace; }
+.game-menu-hosting-note > span { min-width: 0; display: grid; gap: 2px; }
+.game-menu-hosting-note b { color: var(--world-bone); font: 900 clamp(7px,.61vw,9px)/1 ui-monospace,monospace; letter-spacing: .08em; }
+.game-menu-hosting-note small { overflow: hidden; color: var(--world-dim); font: 750 clamp(6px,.5vw,8px)/1 ui-monospace,monospace; letter-spacing: .055em; text-overflow: ellipsis; white-space: nowrap; }
+.game-menu-hosting-note strong { color: var(--world-acid); font: 900 clamp(6px,.54vw,8px)/1.15 ui-monospace,monospace; letter-spacing: .07em; text-align: right; }
+.game-menu-hosting-note:hover,.game-menu-hosting-note:focus-visible { border-color: var(--world-acid); background: rgba(22,61,42,.9); outline: none; }
 .tutorial-compass { position: absolute; z-index: 34; top: 9.5%; left: 3%; right: 3%; display: grid; grid-template-columns: auto minmax(0,1fr) auto; grid-template-rows: auto auto; align-items: center; gap: 3px 9px; padding: 6px 9px; border: 1px solid color-mix(in srgb,var(--world-cyan) 45%,transparent); border-left: 3px solid var(--world-cyan); background: rgba(2,17,13,.91); box-shadow: 0 8px 20px rgba(0,0,0,.3); pointer-events: none; }
 .tutorial-compass > i { grid-row: 1 / 3; width: 31px; height: 31px; display: grid; place-items: center; border: 1px solid var(--world-cyan); border-radius: 50%; color: var(--world-cyan); font: normal 950 11px/1 ui-monospace,monospace; }
 .tutorial-compass > div { min-width: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; }
@@ -3407,6 +3414,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
 .reality-world-balance[data-state="CRITICAL"],.reality-world-balance[data-state="BROKEN"] { border-color: var(--world-cut); box-shadow: 0 0 20px rgba(255,111,91,.24); }.reality-world-balance[data-state="CRITICAL"] small,.reality-world-balance[data-state="CRITICAL"] span,.reality-world-balance[data-state="BROKEN"] small,.reality-world-balance[data-state="BROKEN"] span { color: var(--world-cut); }.reality-world-balance[data-state="CRITICAL"] > i em,.reality-world-balance[data-state="BROKEN"] > i em { background: var(--world-cut); }
 @media (max-width: 1080px), (max-height: 760px) {
   .author-frontier { padding-block: 3px; }
+  .game-menu-hosting-note { padding-block: 4px; }
+  .game-menu-hosting-note small { display: none; }
   .tutorial-compass { top: 9%; padding: 4px 6px; }
   .tutorial-compass > i { width: 26px; height: 26px; }
   .tutorial-compass li { width: 15px; height: 15px; font-size: 6px; }
@@ -3415,7 +3424,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
   .spell-guide > button { min-height: 30px; }
 }
 @media (max-width: 720px) {
-  .author-frontier b,.tutorial-compass small,.tutorial-compass > em { display: none; }
+  .author-frontier b,.game-menu-hosting-note > strong,.tutorial-compass small,.tutorial-compass > em { display: none; }
   .tutorial-compass { grid-template-columns: auto 1fr; right: 2%; left: 2%; }
   .tutorial-compass ol { display: none; }
   .spell-guide { grid-template-columns: auto minmax(0,1fr); }

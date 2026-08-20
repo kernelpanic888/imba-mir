@@ -229,6 +229,10 @@ test("starter preview is fully removed", async () => {
   assert.match(page, /STORY_CHAPTERS\.map/);
   assert.match(page, /ОПУБЛИКОВАНО 0—1/);
   assert.match(page, /ДАЛЬШЕ — ТОЛЬКО ПОСЛЕ АВТОРА/);
+  assert.match(page, /game-menu-hosting-note/);
+  assert.match(page, /ПУБЛИЧНЫЙ ПРОТОТИП · БЕСПЛАТНЫЙ СЕРВЕР/);
+  assert.match(page, /ПОДДЕРЖАТЬ РАЗВИТИЕ — НАПИСАТЬ АВТОРУ/);
+  assert.match(styles, /\.game-menu-hosting-note/);
   assert.match(page, /tutorial-compass/);
   assert.match(page, /ШАГИ ПО ДОРОГЕ ∞ · ХОДЫ НЕ ОГРАНИЧЕНЫ/);
   assert.match(page, /startSelectedChapter/);
