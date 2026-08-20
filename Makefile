@@ -66,6 +66,7 @@ contract: build-lean
 	$(CORE) combat-admit 20260813 0 0 1 0 PLAYER ATTACK 21
 	$(CORE) combat-admit 20260813 3 99 2 99 NATURE ATTACK 4
 	$(CORE) world-react 20260813 2 4 100 100 30 0 0 21
+	$(CORE) world-balance 20260813 2 5 100 100 30 0 0 12 20
 	$(CORE) progress-observe 0 0 0 REDISTRIBUTION
 	$(CORE) progress-unlock 4 0 1 FORECAST
 	$(CORE) spell-law 20260813 1 1 1 0 0

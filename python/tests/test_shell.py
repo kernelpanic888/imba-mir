@@ -47,7 +47,8 @@ class CoreClientTests(unittest.TestCase):
         locked = core.first_strike(2, 0, 0, False)
         self.assertFalse(locked.allowed)
         strike = core.first_strike(2, 5, 3, False)
-        self.assertEqual((strike.allowed, strike.damage), (True, 10))
+        self.assertEqual((strike.allowed, strike.capacity), (True, 10))
+        self.assertEqual(core.first_strike(20, 20, 20, False).capacity, 12)
         tension = core.carry_tension(5, 0, 0)
         self.assertEqual((tension.gained, tension.result), (1, 6))
         living = core.living_admit({"X": 0, "Y": 0, "Z": 0, "W": 0}, 1, 2, "XY")
@@ -81,6 +82,15 @@ class CoreClientTests(unittest.TestCase):
         self.assertEqual(world.event_class, "COMPENSATION")
         self.assertEqual(world.form, "REDISTRIBUTION")
         self.assertEqual((world.direct_damage, world.after.life, world.after.shield), (21, 79, 1))
+        balance = core.world_balance(
+            20260813, 2, 5,
+            WorldVitalsAnswer(life=100, max_life=100, reserve=30, load=0, shield=0),
+            12, 20,
+        )
+        self.assertEqual(balance.world.event_class, "BALANCE")
+        self.assertEqual((balance.player_life_before, balance.player_life_after), (80, 92))
+        self.assertEqual((balance.world.direct_damage, balance.world.backlash), (0, 0))
+        self.assertEqual((balance.world.before.life, balance.world.after.life), (100, 100))
         discovered = core.progress_observe(0, 0, 0, world.form)
         self.assertEqual((discovered.discovery_mask, discovered.mastery_marks), (4, 1))
         self.assertTrue(discovered.new_discovery)
@@ -395,6 +405,8 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(struck["calculation"]["scene"], "attack")
         self.assertFalse(struck["firstStrikeUsed"])
         self.assertEqual(struck["enemyDamage"], 0)
+        player_life_before = struck["actors"]["player"]["life"]
+        world_life_before = struck["actors"]["world"]["life"]
         player_attack = struck["continuity"]["pendingAttack"]
         self.assertEqual((player_attack["actor"], player_attack["kind"]), ("PLAYER", "ATTACK"))
         with self.assertRaises(ValueError):
@@ -403,20 +415,24 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(reacted["status"], "awaiting_tick")
         self.assertEqual(reacted["calculation"]["scene"], "reaction")
         self.assertTrue(reacted["firstStrikeUsed"])
-        self.assertGreater(reacted["enemyDamage"], 0)
+        self.assertEqual(reacted["enemyDamage"], 0)
+        self.assertGreaterEqual(reacted["actors"]["player"]["life"], player_life_before)
+        self.assertGreaterEqual(reacted["actors"]["world"]["life"], world_life_before)
         self.assertIsNone(reacted["continuity"]["pendingAttack"])
         self.assertEqual(reacted["continuity"]["lastReaction"]["actor"], "WORLD")
         self.assertEqual(
             reacted["continuity"]["lastReaction"]["parentHead"],
             player_attack["head"],
         )
-        self.assertEqual(reacted["worldEvent"]["class"], "COMPENSATION")
+        self.assertEqual(reacted["worldEvent"]["class"], "BALANCE")
         reaction_form = reacted["worldEvent"]["form"]
-        self.assertIn(reaction_form, {"REGENERATION", "BARRIER", "REDISTRIBUTION", "SCAR", "OVERLOAD"})
+        self.assertEqual(reaction_form, "REDISTRIBUTION")
+        self.assertEqual(reacted["worldEvent"]["directDamage"], 0)
+        self.assertEqual(reacted["worldEvent"]["backlash"], 0)
         self.assertEqual(reacted["actors"]["world"]["life"], reacted["worldEvent"]["after"]["life"])
         self.assertEqual(reacted["actors"]["world"]["shield"], reacted["worldEvent"]["after"]["shield"])
         self.assertEqual(reacted["calculation"]["eventForm"], reaction_form)
-        self.assertIn("resolved_life_bounded", reacted["calculation"]["theorem"])
+        self.assertIn("balance_contact_has_no_damage", reacted["calculation"]["theorem"])
         self.assertTrue(reacted["progression"]["pendingChoice"])
         self.assertEqual(reacted["progression"]["discovered"], [reaction_form])
         self.assertEqual(reacted["progression"]["masteryMarks"], 1)
@@ -465,7 +481,7 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertIsNotNone(ready["progression"]["forecast"])
         self.assertIn(
             ready["progression"]["forecast"]["form"],
-            {"REGENERATION", "BARRIER", "REDISTRIBUTION", "SCAR", "OVERLOAD"},
+            {"REDISTRIBUTION"},
         )
         struck = session.act({"action": "first_strike"})
         self.assertIsNone(struck["progression"]["forecast"])

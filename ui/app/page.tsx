@@ -86,7 +86,7 @@ type DefenseView = {
 };
 type FirstStrikeView = {
   allowed: boolean;
-  damage: number;
+  capacity: number;
   confirmedTicks: number;
   previousTension: number;
   reflection: number;
@@ -194,7 +194,7 @@ type WorldVitalsView = {
 type WorldActorView = ActorVitalsView & WorldVitalsView;
 type WorldEventForm = "REGENERATION" | "BARRIER" | "REDISTRIBUTION" | "SCAR" | "OVERLOAD";
 type WorldEventView = {
-  class: "COMPENSATION";
+  class: "COMPENSATION" | "BALANCE";
   form: WorldEventForm;
   title: string;
   power: number;
@@ -202,6 +202,7 @@ type WorldEventView = {
   absorbed: number;
   directDamage: number;
   healing: number;
+  playerHealing: number;
   reserveCost: number;
   backlash: number;
   before: WorldVitalsView;
@@ -319,7 +320,7 @@ type WorldState = {
   enemyDamage: number;
   firstStrikeUsed: boolean;
   firstStrike: FirstStrikeView | null;
-  lastStrikeDamage: number | null;
+  lastBalanceCapacity: number | null;
   actors: { player: PlayerActorView; world: WorldActorView };
   worldEvent: WorldEventView | null;
   worldEvents: WorldEventView[];
@@ -1629,7 +1630,7 @@ export default function WorldHome() {
                 {reactionPending && <div className="world-field-reaction"><b>КЛИКНИТЕ ПО МИРУ</b><small>ПРИНЯТЬ КОНТАКТ · СОЗДАТЬ РЕАКЦИЮ</small></div>}
                 <div className="actor-life"><span>ЖИЗНЬ</span><b>{worldActor.life}<small> / {worldActor.maxLife}</small></b><div><i style={{ width: `${worldLifePercent}%` }} /></div></div>
                 <div className="world-vitals"><span>β ЩИТ <b>{worldActor.shield}</b></span><span>R РЕЗЕРВ <b>{worldActor.reserve}</b></span><span>Λ НАГРУЗКА <b>{worldActor.load}</b></span></div>
-                {worldEvent && <p className="world-event-name"><span>{reactionGlyph} {worldEvent.class}</span><b>{worldEvent.title}</b><small>▼ −{worldEvent.directDamage} HP · ✚ +{worldEvent.healing} · ⌁ +{worldEvent.backlash}</small></p>}
+                {worldEvent && <p className="world-event-name"><span>{reactionGlyph} {worldEvent.class}</span><b>{worldEvent.title}</b><small>⚖ ВОРОН +{worldEvent.playerHealing} · МИР +{worldEvent.healing} · УРОН 0</small></p>}
               </article>
             </section>
             <div className="shadow-plane" aria-label="Тень недоступна; внутри Мира наблюдается только реликт границы">
@@ -1879,8 +1880,8 @@ export default function WorldHome() {
           {!natureActive && (
             <div className="initiative-card" data-ready={status === "awaiting_tick" && world?.firstStrike?.allowed && !world?.firstStrikeUsed} data-used={world?.firstStrikeUsed}>
               <div className="initiative-head"><span>ПЕРВЫЙ КОНТАКТ</span><b>{reactionPending ? "ЖДЁТ РЕАКЦИИ" : world?.firstStrikeUsed ? "СОВЕРШЁН" : "ИНИЦИАТИВА"}</b></div>
-              <div className="tension-equation"><span>{world?.confirmedTicks ?? 0}<small>ТИКИ</small></span><i>+</i><span>{world?.internalTension ?? 0}<small>НАПРЯЖЕНИЕ</small></span><i>+</i><span>{world?.living.reflection ?? 0}<small>РЕФЛЕКСИЯ</small></span><i>=</i><strong>{world?.firstStrike?.damage ?? 0}</strong></div>
-              <p>{reactionPending ? "Контакт дописан в историю, но изменение удерживается до отдельной реакции Мира." : world?.firstStrikeUsed ? `Первый контакт этого цикла передал Миру импульс ${world.lastStrikeDamage}.` : (world?.internalTension ?? 0) === 0 ? "Первая сессия ещё не оставила внутреннего напряжения." : (world?.confirmedTicks ?? 0) === 0 ? "Подтвердите хотя бы один тик в новой сессии." : status !== "awaiting_tick" ? "Сначала завершите подтверждение текущего шага." : "Тики готовы высвободить напряжение предыдущих сессий."}</p>
+              <div className="tension-equation"><span>{world?.confirmedTicks ?? 0}<small>ТИКИ</small></span><i>+</i><span>{world?.internalTension ?? 0}<small>НАПРЯЖЕНИЕ</small></span><i>+</i><span>{world?.living.reflection ?? 0}<small>РЕФЛЕКСИЯ</small></span><i>=</i><strong>{world?.firstStrike?.capacity ?? 0}<small>ЁМКОСТЬ БАЛАНСА / 12</small></strong></div>
+              <p>{reactionPending ? "Контакт дописан в историю. Жизнь обеих сторон неизменна до реакции Мира." : world?.firstStrikeUsed ? `Контакт этого цикла сохранил баланс с ёмкостью ${world.lastBalanceCapacity ?? 0}/12.` : (world?.internalTension ?? 0) === 0 ? "Первая сессия ещё не оставила внутреннего напряжения." : (world?.confirmedTicks ?? 0) === 0 ? "Подтвердите хотя бы один тик в новой сессии." : status !== "awaiting_tick" ? "Сначала завершите подтверждение текущего шага." : "Тики готовы превратить напряжение прошлых сессий в безопасную ёмкость баланса."}</p>
               <button disabled={progressChoicePending || busy || status !== "awaiting_tick" || !world?.firstStrike?.allowed || world?.firstStrikeUsed} onClick={() => void actWorld("first_strike")}><span>НАЧАТЬ КОНТАКТ ПЕРВЫМ</span><b>→</b></button>
             </div>
           )}

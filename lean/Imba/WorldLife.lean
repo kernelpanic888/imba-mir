@@ -157,4 +157,70 @@ theorem shield_never_amplifies_direct_damage (identity cycle epoch rawDamage : N
     (resolveWorldHit identity cycle epoch rawDamage before).directDamage ≤ rawDamage := by
   simp [resolveWorldHit]
 
+structure BalanceOutcome where
+  capacity : Nat
+  playerDamageBefore : Nat
+  playerLifeBefore : Nat
+  playerHealing : Nat
+  playerDamageAfter : Nat
+  playerLifeAfter : Nat
+  worldHealing : Nat
+  world : CompensationOutcome
+  deriving Repr, DecidableEq
+
+/--
+Initiative spends at most `capacity` on the lower life total. It never pushes
+that side past the higher one and never subtracts life from Raven or World.
+`playerDamage` is saturated against the Raven's fixed 100 life points.
+-/
+def resolveBalanceContact (capacity playerDamage : Nat)
+    (before : WorldVitals) : BalanceOutcome :=
+  let playerDamageBefore := min 100 playerDamage
+  let playerLifeBefore := 100 - playerDamageBefore
+  let worldBefore := before.normalize
+  let playerHealing :=
+    if playerLifeBefore < worldBefore.life then
+      min capacity (worldBefore.life - playerLifeBefore)
+    else 0
+  let worldHealing :=
+    if worldBefore.life < playerLifeBefore then
+      min capacity (min (playerLifeBefore - worldBefore.life)
+        (worldBefore.maxLife - worldBefore.life))
+    else 0
+  let playerDamageAfter := playerDamageBefore - playerHealing
+  let playerLifeAfter := 100 - playerDamageAfter
+  let worldAfter := { worldBefore with life := worldBefore.life + worldHealing }
+  let world : CompensationOutcome := {
+    eventClass := "BALANCE"
+    form := .redistribution
+    power := capacity
+    rawDamage := 0
+    absorbed := 0
+    directDamage := 0
+    healing := worldHealing
+    reserveCost := 0
+    backlash := 0
+    before := worldBefore
+    after := worldAfter
+  }
+  { capacity := capacity
+    playerDamageBefore := playerDamageBefore
+    playerLifeBefore := playerLifeBefore
+    playerHealing := playerHealing
+    playerDamageAfter := playerDamageAfter
+    playerLifeAfter := playerLifeAfter
+    worldHealing := worldHealing
+    world := world }
+
+theorem balance_contact_has_no_damage (capacity playerDamage : Nat)
+    (before : WorldVitals) :
+    (resolveBalanceContact capacity playerDamage before).world.directDamage = 0 ∧
+      (resolveBalanceContact capacity playerDamage before).world.backlash = 0 := by
+  simp [resolveBalanceContact]
+
+theorem balance_contact_capacity_preserved (capacity playerDamage : Nat)
+    (before : WorldVitals) :
+    (resolveBalanceContact capacity playerDamage before).capacity = capacity := by
+  simp [resolveBalanceContact]
+
 end Imba

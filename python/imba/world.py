@@ -96,8 +96,8 @@ class WorldState:
     plane_preview: DefenseAnswer | None = None
     first_strike_used: bool = False
     strike_preview: FirstStrikeAnswer | None = None
-    last_strike_damage: int | None = None
-    pending_strike_damage: int | None = None
+    last_balance_capacity: int | None = None
+    pending_balance_capacity: int | None = None
     axis_memory: dict[str, int] = field(
         default_factory=lambda: {"X": 0, "Y": 0, "Z": 0, "W": 0}
     )
@@ -140,13 +140,14 @@ class WorldGame:
         if not self._has_protocol("FORECAST") or preview is None or not preview.allowed:
             self.state.forecast = None
             return
-        self.state.forecast = self.core.world_react(
+        self.state.forecast = self.core.world_balance(
             self.state.seed,
             self.state.cycle,
             self.state.combat_epoch + 2,
             self.state.world_vitals,
-            preview.damage,
-        )
+            preview.capacity,
+            self.state.total_damage,
+        ).world
 
     def _require_protocol_choice(self) -> None:
         if self.state.progression.pending_choice:
@@ -210,8 +211,8 @@ class WorldGame:
         self.state.defense = None
         self.state.plane_preview = None
         self.state.first_strike_used = False
-        self.state.last_strike_damage = None
-        self.state.pending_strike_damage = None
+        self.state.last_balance_capacity = None
+        self.state.pending_balance_capacity = None
         self.state.pending_attack = None
         self.state.strike_preview = self.core.first_strike(
             0, self.state.internal_tension, self.state.reflection, False
@@ -357,37 +358,41 @@ class WorldGame:
         )
         if not answer.allowed:
             raise ValueError("для первого контакта нужны тики и напряжение прошлых сессий")
-        attack = self._append_combat("PLAYER", "ATTACK", answer.damage)
-        self.state.pending_strike_damage = answer.damage
+        attack = self._append_combat("PLAYER", "ATTACK", answer.capacity)
+        self.state.pending_balance_capacity = answer.capacity
         self.state.status = "awaiting_world_reaction"
         self.state.forecast = None
         self.state.messages.append(
             f"Контакт Σ{attack.result_epoch} предложен: {self.state.confirmed_ticks} тиков + "
             f"{self.state.internal_tension} напряжения + {self.state.reflection} "
-            f"рефлексии = {answer.damage}. Изменение ждёт реакции Мира."
+            f"рефлексии открыли ёмкость баланса {answer.capacity}/12. "
+            "Жизнь не меняется до реакции Мира."
         )
 
     def world_reaction(self) -> None:
         attack = self.state.pending_attack
-        damage = self.state.pending_strike_damage
+        capacity = self.state.pending_balance_capacity
         if (
             self.state.status != "awaiting_world_reaction"
             or attack is None
             or attack.actor != "PLAYER"
             or attack.kind != "ATTACK"
-            or damage is None
+            or capacity is None
         ):
             raise ValueError("нет контакта игрока, ожидающего реакции Мира")
-        reaction = self._append_combat("WORLD", "REACTION", damage)
+        reaction = self._append_combat("WORLD", "REACTION", capacity)
         if reaction.parent_head != attack.result_head:
             raise ValueError("реакция Мира не привязана к принятому контакту")
-        compensation = self.core.world_react(
+        balance = self.core.world_balance(
             self.state.seed,
             self.state.cycle,
             reaction.result_epoch,
             self.state.world_vitals,
-            damage,
+            capacity,
+            self.state.total_damage,
         )
+        compensation = balance.world
+        self.state.total_damage = balance.player_damage_after
         self.state.world_vitals = compensation.after
         self.state.world_events.append(compensation)
         self.state.world_events[:] = self.state.world_events[-8:]
@@ -401,13 +406,10 @@ class WorldGame:
         self.state.progression.protocol_mask = progress.protocol_mask
         self.state.progression.mastery_marks = progress.mastery_marks
         self.state.progression.pending_choice = progress.pending_choice
-        self.state.enemy_damage += compensation.direct_damage + compensation.backlash
         self.state.first_strike_used = True
-        self.state.last_strike_damage = compensation.direct_damage
-        self.state.pending_strike_damage = None
-        self.state.status = (
-            "world_defeated" if compensation.after.life == 0 else "awaiting_tick"
-        )
+        self.state.last_balance_capacity = capacity
+        self.state.pending_balance_capacity = None
+        self.state.status = "awaiting_tick"
         self.state.strike_preview = self.core.first_strike(
             self.state.confirmed_ticks,
             self.state.internal_tension,
@@ -415,20 +417,11 @@ class WorldGame:
             True,
         )
         self._refresh_forecast()
-        effect = (
-            f"лечение +{compensation.healing}"
-            if compensation.healing
-            else f"щит → {compensation.after.shield}"
-            if compensation.after.shield
-            else f"перегрузка +{compensation.backlash}"
-            if compensation.backlash
-            else "перераспределение ресурса"
-        )
         self.state.messages.append(
-            f"Мир ответил формой {compensation.form}: вход {damage}, "
-            f"прямой урон {compensation.direct_damage}; {effect}. "
-            f"Жизнь {compensation.before.life}→{compensation.after.life}, "
-            f"нагрузка {compensation.before.load}→{compensation.after.load}."
+            f"Мир ответил балансом: ёмкость {capacity}/12, "
+            f"Ворон восстановил {balance.player_healing}, Мир восстановил {compensation.healing}. "
+            f"Жизнь Мира {compensation.before.life}→{compensation.after.life}; "
+            "ни одна сторона не получила урон."
         )
         if progress.new_discovery:
             self.state.messages.append(

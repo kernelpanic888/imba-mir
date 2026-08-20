@@ -257,7 +257,7 @@ private def runFirstStrike (ticksText tensionText reflectionText usedText : Stri
                   else
                     let alreadyUsed := used == 1
                     let allowed := Imba.firstStrikeAllowed ticks tension alreadyUsed
-                    let damage := Imba.firstStrikeDamage ticks tension reflection alreadyUsed
+                    let capacity := Imba.initiativeCapacity ticks tension reflection alreadyUsed
                     emit (success [
                       ("op", toJson "first-strike"),
                       ("confirmedTicks", toJson ticks),
@@ -265,11 +265,11 @@ private def runFirstStrike (ticksText tensionText reflectionText usedText : Stri
                       ("reflection", toJson reflection),
                       ("alreadyUsed", toJson alreadyUsed),
                       ("allowed", toJson allowed),
-                      ("damage", toJson damage),
+                      ("capacity", toJson capacity),
                       ("reason", toJson (if allowed then
-                        "confirmed ticks release carried tension through reflective depth"
+                        "confirmed ticks open a bounded capacity to restore the lower life toward balance"
                       else
-                        "first strike needs ticks, previous-session tension, and an unused initiative"))
+                        "initiative needs ticks, previous-session tension, and an unused contact"))
                     ])
 
 private def runLivingAdmit (xText yText zText wText ticksText damageText planeText : String) : IO UInt32 :=
@@ -405,6 +405,7 @@ private def runWorldReact (identityText cycleText epochText lifeText maxLifeText
         ("absorbed", toJson answer.absorbed),
         ("directDamage", toJson answer.directDamage),
         ("healing", toJson answer.healing),
+        ("playerHealing", toJson 0),
         ("reserveCost", toJson answer.reserveCost),
         ("backlash", toJson answer.backlash),
         ("beforeLife", toJson answer.before.life),
@@ -421,6 +422,56 @@ private def runWorldReact (identityText cycleText epochText lifeText maxLifeText
       ])
   | _, _, _, _, _, _, _, _, _ =>
       emit (failure "world-react expects nine natural numbers") 2
+
+private def runWorldBalance (identityText cycleText epochText lifeText maxLifeText
+    reserveText loadText shieldText capacityText playerDamageText : String) : IO UInt32 :=
+  match parseRank identityText, parseRank cycleText, parseRank epochText,
+      parseRank lifeText, parseRank maxLifeText, parseRank reserveText,
+      parseRank loadText, parseRank shieldText, parseRank capacityText,
+      parseRank playerDamageText with
+  | some identity, some cycle, some epoch, some life, some maxLife,
+      some reserve, some load, some shield, some capacity, some playerDamage =>
+      let before : Imba.WorldVitals := {
+        life := life, maxLife := maxLife, reserve := reserve,
+        load := load, shield := shield
+      }
+      let balance := Imba.resolveBalanceContact capacity playerDamage before
+      let answer := balance.world
+      emit (success [
+        ("op", toJson "world-balance"),
+        ("identity", toJson identity),
+        ("cycle", toJson cycle),
+        ("epoch", toJson epoch),
+        ("eventClass", toJson answer.eventClass),
+        ("form", toJson answer.form.label),
+        ("title", toJson "Балансирующий отклик"),
+        ("power", toJson answer.power),
+        ("capacity", toJson balance.capacity),
+        ("rawDamage", toJson answer.rawDamage),
+        ("absorbed", toJson answer.absorbed),
+        ("directDamage", toJson answer.directDamage),
+        ("healing", toJson answer.healing),
+        ("playerDamageBefore", toJson balance.playerDamageBefore),
+        ("playerLifeBefore", toJson balance.playerLifeBefore),
+        ("playerHealing", toJson balance.playerHealing),
+        ("playerDamageAfter", toJson balance.playerDamageAfter),
+        ("playerLifeAfter", toJson balance.playerLifeAfter),
+        ("reserveCost", toJson answer.reserveCost),
+        ("backlash", toJson answer.backlash),
+        ("beforeLife", toJson answer.before.life),
+        ("beforeMaxLife", toJson answer.before.maxLife),
+        ("beforeReserve", toJson answer.before.reserve),
+        ("beforeLoad", toJson answer.before.load),
+        ("beforeShield", toJson answer.before.shield),
+        ("life", toJson answer.after.life),
+        ("maxLife", toJson answer.after.maxLife),
+        ("reserve", toJson answer.after.reserve),
+        ("load", toJson answer.after.load),
+        ("shield", toJson answer.after.shield),
+        ("reason", toJson "initiative restores only the lower life toward the higher; neither side loses life")
+      ])
+  | _, _, _, _, _, _, _, _, _, _ =>
+      emit (failure "world-balance expects ten natural numbers") 2
 
 private def runProgressObserve (discoveryText protocolText marksText formText : String) : IO UInt32 :=
   match parseRank discoveryText, parseRank protocolText, parseRank marksText,
@@ -725,6 +776,11 @@ def run (args : List String) : IO UInt32 :=
       runWorldReact identity cycle epoch life maxLife reserve load shield damage
   | "world-react" :: _ => wrongArity
       "imba-core world-react <identity> <cycle> <epoch> <life> <max-life> <reserve> <load> <shield> <damage>"
+  | ["world-balance", identity, cycle, epoch, life, maxLife, reserve, load, shield,
+      capacity, playerDamage] =>
+      runWorldBalance identity cycle epoch life maxLife reserve load shield capacity playerDamage
+  | "world-balance" :: _ => wrongArity
+      "imba-core world-balance <identity> <cycle> <epoch> <life> <max-life> <reserve> <load> <shield> <capacity> <player-damage>"
   | ["progress-observe", discoveries, protocols, marks, form] =>
       runProgressObserve discoveries protocols marks form
   | "progress-observe" :: _ => wrongArity

@@ -88,6 +88,15 @@ test("server-renders the Imba game shell", async () => {
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|Building your site/i);
 });
 
+test("initiative is presented as bounded balance capacity, never damage", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /firstStrike\?\.capacity/);
+  assert.match(source, /ЁМКОСТЬ БАЛАНСА \/ 12/);
+  assert.match(source, /УРОН 0/);
+  assert.match(source, /lastBalanceCapacity/);
+  assert.doesNotMatch(source, /firstStrike\?\.damage|lastStrikeDamage/);
+});
+
 test("public API fails honestly when the Lean runtime is not configured", async () => {
   const response = await publicApiWithoutRuntime();
   assert.equal(response.status, 503);

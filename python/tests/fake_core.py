@@ -125,7 +125,7 @@ def main(args: list[str]) -> None:
                 "reflection": reflection,
                 "alreadyUsed": used == 1,
                 "allowed": allowed,
-                "damage": ticks + tension + reflection if allowed else 0,
+                "capacity": min(12, ticks + tension + reflection) if allowed else 0,
                 "reason": "test-double initiative decision",
             })
         if command == "tension-carry" and len(rest) == 3:
@@ -281,12 +281,47 @@ def main(args: list[str]) -> None:
                 "eventClass": "COMPENSATION", "form": form, "title": titles[form],
                 "power": power, "rawDamage": damage, "absorbed": absorbed,
                 "directDamage": direct, "healing": healing,
+                "playerHealing": 0,
                 "reserveCost": reserve_cost, "backlash": backlash,
                 "beforeLife": life, "beforeMaxLife": max_life,
                 "beforeReserve": reserve, "beforeLoad": load, "beforeShield": shield,
                 "life": min(next_life, next_max), "maxLife": next_max,
                 "reserve": next_reserve, "load": next_load, "shield": next_shield,
                 "reason": "test-double living-World compensation decision",
+            })
+        if command == "world-balance" and len(rest) == 10:
+            identity, cycle, epoch, life, max_life, reserve, load, shield, capacity, player_damage = map(
+                natural, rest
+            )
+            world_life = min(life, max_life)
+            player_damage_before = min(100, player_damage)
+            player_life_before = 100 - player_damage_before
+            player_healing = 0
+            world_healing = 0
+            if player_life_before < world_life:
+                player_healing = min(capacity, world_life - player_life_before)
+            elif world_life < player_life_before:
+                world_healing = min(capacity, player_life_before - world_life, max_life - world_life)
+            player_damage_after = player_damage_before - player_healing
+            player_life_after = 100 - player_damage_after
+            emit({
+                "ok": True, "op": "world-balance",
+                "identity": identity, "cycle": cycle, "epoch": epoch,
+                "eventClass": "BALANCE", "form": "REDISTRIBUTION",
+                "title": "Балансирующий отклик",
+                "power": capacity, "capacity": capacity,
+                "rawDamage": 0, "absorbed": 0, "directDamage": 0,
+                "healing": world_healing, "playerHealing": player_healing,
+                "reserveCost": 0, "backlash": 0,
+                "playerDamageBefore": player_damage_before,
+                "playerLifeBefore": player_life_before,
+                "playerDamageAfter": player_damage_after,
+                "playerLifeAfter": player_life_after,
+                "beforeLife": world_life, "beforeMaxLife": max_life,
+                "beforeReserve": reserve, "beforeLoad": load, "beforeShield": shield,
+                "life": world_life + world_healing, "maxLife": max_life,
+                "reserve": reserve, "load": load, "shield": shield,
+                "reason": "test-double balance contact preserves both lives",
             })
         if command == "progress-observe" and len(rest) == 4:
             discoveries, protocols, marks = map(natural, rest[:3])

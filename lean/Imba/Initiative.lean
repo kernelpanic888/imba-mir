@@ -2,11 +2,11 @@ import Init.Data.Nat.Lemmas
 import Std.Tactic
 
 /-!
-# Imba: carried tension and first strike
+# Imba: carried tension and balancing initiative
 
-Every finished session contributes strictly positive internal tension.  A later
+Every finished session contributes strictly positive internal tension. A later
 session can turn accumulated confirmed ticks and tension from earlier sessions
-into one first strike against the World.
+into one bounded opportunity to restore balance between Raven and World.
 -/
 
 namespace Imba
@@ -29,7 +29,7 @@ theorem every_session_increases_tension (previous confirmedTicks natureDamage : 
   unfold carryTension
   exact Nat.lt_add_of_pos_right (sessionTension_positive confirmedTicks natureDamage)
 
-/-- Eligibility for the single first strike of a session. -/
+/-- Eligibility for the single balancing initiative of a session. -/
 def CanFirstStrike (confirmedTicks previousTension : Nat) (alreadyUsed : Bool) : Prop :=
   0 < confirmedTicks ∧ 0 < previousTension ∧ alreadyUsed = false
 
@@ -43,11 +43,14 @@ def firstStrikeAllowed (confirmedTicks previousTension : Nat)
     (alreadyUsed : Bool) : Bool :=
   decide (CanFirstStrike confirmedTicks previousTension alreadyUsed)
 
-/-- The first strike combines this session's tick pressure with carried tension. -/
-def firstStrikeDamage (confirmedTicks previousTension reflection : Nat)
+/--
+The initiative turns accumulated history into a bounded correction capacity.
+The cap prevents an unbounded chronicle from being released into finite lives.
+-/
+def initiativeCapacity (confirmedTicks previousTension reflection : Nat)
     (alreadyUsed : Bool) : Nat :=
   if CanFirstStrike confirmedTicks previousTension alreadyUsed then
-    confirmedTicks + previousTension + reflection
+    min 12 (confirmedTicks + previousTension + reflection)
   else
     0
 
@@ -55,12 +58,18 @@ theorem first_session_cannot_strike (confirmedTicks : Nat) (alreadyUsed : Bool) 
     ¬ CanFirstStrike confirmedTicks 0 alreadyUsed := by
   simp [CanFirstStrike]
 
-theorem allowed_first_strike_positive {confirmedTicks previousTension : Nat}
+theorem allowed_initiative_positive {confirmedTicks previousTension : Nat}
     {reflection : Nat} {alreadyUsed : Bool}
     (h : CanFirstStrike confirmedTicks previousTension alreadyUsed) :
-    0 < firstStrikeDamage confirmedTicks previousTension reflection alreadyUsed := by
-  rw [firstStrikeDamage, if_pos h]
+    0 < initiativeCapacity confirmedTicks previousTension reflection alreadyUsed := by
+  rw [initiativeCapacity, if_pos h]
   rcases h with ⟨hTicks, hTension, _⟩
   omega
+
+theorem initiative_capacity_bounded (confirmedTicks previousTension reflection : Nat)
+    (alreadyUsed : Bool) :
+    initiativeCapacity confirmedTicks previousTension reflection alreadyUsed ≤ 12 := by
+  unfold initiativeCapacity
+  split <;> omega
 
 end Imba

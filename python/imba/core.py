@@ -68,7 +68,7 @@ class FirstStrikeAnswer:
     previous_tension: int
     reflection: int
     already_used: bool
-    damage: int
+    capacity: int
     reason: str
 
 
@@ -155,11 +155,23 @@ class WorldCompensationAnswer:
     absorbed: int
     direct_damage: int
     healing: int
+    player_healing: int
     reserve_cost: int
     backlash: int
     before: WorldVitalsAnswer
     after: WorldVitalsAnswer
     reason: str
+
+
+@dataclass(frozen=True)
+class BalanceContactAnswer:
+    capacity: int
+    player_damage_before: int
+    player_life_before: int
+    player_healing: int
+    player_damage_after: int
+    player_life_after: int
+    world: WorldCompensationAnswer
 
 
 @dataclass(frozen=True)
@@ -471,7 +483,7 @@ class CoreClient:
             previous_tension=self._field(payload, "previousTension", int),
             reflection=self._field(payload, "reflection", int),
             already_used=self._field(payload, "alreadyUsed", bool),
-            damage=self._field(payload, "damage", int),
+            capacity=self._field(payload, "capacity", int),
             reason=self._field(payload, "reason", str),
         )
         if (
@@ -481,8 +493,8 @@ class CoreClient:
             or answer.already_used != already_used
         ):
             raise CoreProtocolError("core echoed different first-strike inputs")
-        if answer.allowed != (answer.damage > 0):
-            raise CoreProtocolError("first-strike permission disagrees with damage")
+        if answer.allowed != (answer.capacity > 0) or answer.capacity > 12:
+            raise CoreProtocolError("initiative permission disagrees with bounded capacity")
         return answer
 
     def living_admit(
@@ -717,6 +729,7 @@ class CoreClient:
             absorbed=self._field(payload, "absorbed", int),
             direct_damage=self._field(payload, "directDamage", int),
             healing=self._field(payload, "healing", int),
+            player_healing=self._field(payload, "playerHealing", int),
             reserve_cost=self._field(payload, "reserveCost", int),
             backlash=self._field(payload, "backlash", int),
             before=before,
@@ -735,6 +748,77 @@ class CoreClient:
             raise CoreProtocolError("World shield did not conserve incoming damage")
         if answer.after.life > answer.after.max_life:
             raise CoreProtocolError("World life exceeds its proven maximum")
+        return answer
+
+    def world_balance(
+        self,
+        identity: int,
+        cycle: int,
+        epoch: int,
+        vitals: WorldVitalsAnswer,
+        capacity: int,
+        player_damage: int,
+    ) -> BalanceContactAnswer:
+        payload = self._call(
+            "world-balance", identity, cycle, epoch, vitals.life, vitals.max_life,
+            vitals.reserve, vitals.load, vitals.shield, capacity, player_damage,
+        )
+        before = WorldVitalsAnswer(
+            life=self._field(payload, "beforeLife", int),
+            max_life=self._field(payload, "beforeMaxLife", int),
+            reserve=self._field(payload, "beforeReserve", int),
+            load=self._field(payload, "beforeLoad", int),
+            shield=self._field(payload, "beforeShield", int),
+        )
+        after = WorldVitalsAnswer(
+            life=self._field(payload, "life", int),
+            max_life=self._field(payload, "maxLife", int),
+            reserve=self._field(payload, "reserve", int),
+            load=self._field(payload, "load", int),
+            shield=self._field(payload, "shield", int),
+        )
+        world = WorldCompensationAnswer(
+            identity=self._field(payload, "identity", int),
+            cycle=self._field(payload, "cycle", int),
+            epoch=self._field(payload, "epoch", int),
+            event_class=self._field(payload, "eventClass", str),
+            form=self._field(payload, "form", str),
+            title=self._field(payload, "title", str),
+            power=self._field(payload, "power", int),
+            raw_damage=self._field(payload, "rawDamage", int),
+            absorbed=self._field(payload, "absorbed", int),
+            direct_damage=self._field(payload, "directDamage", int),
+            healing=self._field(payload, "healing", int),
+            player_healing=self._field(payload, "playerHealing", int),
+            reserve_cost=self._field(payload, "reserveCost", int),
+            backlash=self._field(payload, "backlash", int),
+            before=before,
+            after=after,
+            reason=self._field(payload, "reason", str),
+        )
+        answer = BalanceContactAnswer(
+            capacity=self._field(payload, "capacity", int),
+            player_damage_before=self._field(payload, "playerDamageBefore", int),
+            player_life_before=self._field(payload, "playerLifeBefore", int),
+            player_healing=self._field(payload, "playerHealing", int),
+            player_damage_after=self._field(payload, "playerDamageAfter", int),
+            player_life_after=self._field(payload, "playerLifeAfter", int),
+            world=world,
+        )
+        if (
+            world.identity, world.cycle, world.epoch, world.before,
+            answer.capacity, answer.player_damage_before,
+        ) != (identity, cycle, epoch, vitals, capacity, min(100, player_damage)):
+            raise CoreProtocolError("core echoed different balance-contact inputs")
+        if (
+            world.event_class != "BALANCE"
+            or world.direct_damage != 0
+            or world.backlash != 0
+            or world.after.life < world.before.life
+            or answer.player_damage_after > answer.player_damage_before
+            or answer.player_healing + answer.player_damage_after != answer.player_damage_before
+        ):
+            raise CoreProtocolError("balance contact harmed a living side")
         return answer
 
     def progress_observe(

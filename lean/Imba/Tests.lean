@@ -73,7 +73,8 @@ example (rank : Nat) (roll : AxisRoll) (plane : Plane) :
 example : sessionTension 0 0 = 1 := by decide
 example : carryTension 7 0 0 = 8 := by decide
 example : firstStrikeAllowed 2 5 false = true := by decide
-example : firstStrikeDamage 2 5 3 false = 10 := by decide
+example : initiativeCapacity 2 5 3 false = 10 := by decide
+example : initiativeCapacity 20 50 30 false = 12 := by decide
 example : firstStrikeAllowed 2 5 true = false := by decide
 example (previous ticks damage : Nat) :
     previous < carryTension previous ticks damage :=
@@ -116,6 +117,16 @@ example (identity cycle epoch damage : Nat) (vitals : WorldVitals) :
 example (identity cycle epoch damage : Nat) (vitals : WorldVitals) :
     (resolveWorldHit identity cycle epoch damage vitals).directDamage ≤ damage :=
   shield_never_amplifies_direct_damage identity cycle epoch damage vitals
+
+example : (resolveBalanceContact 12 0 {}).playerHealing = 0 := by decide
+example :
+    (resolveBalanceContact 12 30 { life := 90 }).playerHealing = 12 := by decide
+example :
+    (resolveBalanceContact 12 0 { life := 70 }).worldHealing = 12 := by decide
+example (capacity playerDamage : Nat) (vitals : WorldVitals) :
+    (resolveBalanceContact capacity playerDamage vitals).world.directDamage = 0 ∧
+      (resolveBalanceContact capacity playerDamage vitals).world.backlash = 0 :=
+  balance_contact_has_no_damage capacity playerDamage vitals
 
 example : (observeProgress 0 0 0 .barrier).discoveryMask = 2 := by decide
 example : (observeProgress 0 0 0 .barrier).masteryMarks = 1 := by decide
