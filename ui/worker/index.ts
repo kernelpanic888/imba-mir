@@ -5,6 +5,7 @@ import handler from "vinext/server/app-router-entry";
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  IMBA_API_ORIGIN?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -28,6 +29,34 @@ interface ExecutionContext {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith("/api/")) {
+      const configuredOrigin = env.IMBA_API_ORIGIN?.trim();
+      const localRequest = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+      const apiOrigin = configuredOrigin || (localRequest ? "http://127.0.0.1:8765" : "");
+      if (!apiOrigin) {
+        return Response.json(
+          { ok: false, error: "The public Lean runtime is not configured yet." },
+          { status: 503, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      const upstream = new URL(`${url.pathname}${url.search}`, apiOrigin);
+      const headers = new Headers(request.headers);
+      headers.delete("host");
+      const upstreamResponse = await fetch(new Request(upstream, {
+        method: request.method,
+        headers,
+        body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+        redirect: "manual",
+      }));
+      const responseHeaders = new Headers(upstreamResponse.headers);
+      responseHeaders.set("Cache-Control", "no-store");
+      return new Response(upstreamResponse.body, {
+        status: upstreamResponse.status,
+        statusText: upstreamResponse.statusText,
+        headers: responseHeaders,
+      });
+    }
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];

@@ -1,0 +1,46 @@
+name: Verify IMBA / MIR
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python-and-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test Python boundary and independent sessions
+        run: PYTHONPATH=python python -m unittest discover -s python/tests -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+      - name: Build and test UI
+        working-directory: ui
+        run: npm test
+
+  lean-container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned Lean runtime container
+        run: docker build --tag imba-mir-core:test .
+      - name: Verify container health and Lean authority
+        run: |
+          docker run --detach --name imba-core-test --publish 8765:8765 imba-mir-core:test
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8765/api/health > health.json; then break; fi
+            sleep 1
+          done
+          grep --fixed-strings '"engine":"Lean 4 / imba-core"' health.json
+          docker logs imba-core-test

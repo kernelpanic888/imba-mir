@@ -1,0 +1,9 @@
+.git
+.github
+.DS_Store
+lean/.lake
+python/**/__pycache__
+ui/node_modules
+ui/.vinext
+ui/dist
+ui/.wrangler

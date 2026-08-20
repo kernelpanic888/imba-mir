@@ -28,6 +28,12 @@ The implementation keeps that law in one place:
 - `contracts/sample-transcript.json` is a readable protocol example;
 - `scripts/imba-core` gives Python a stable path to the Lean executable.
 
+The published interface uses a same-origin `/api/*` route. A Worker forwards
+that route to a container containing the compiled native Lean core and the
+Python session boundary; browsers never call their own `localhost`. Each player
+receives an independent expiring session. The complete contract is
+[`docs/PUBLIC_RUNTIME_PASSPORT.md`](docs/PUBLIC_RUNTIME_PASSPORT.md).
+
 Python never decides whether an attack wins and never computes a fusion or
 promotion result. It asks Lean once per transition and displays the answer.
 

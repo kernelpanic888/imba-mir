@@ -51,7 +51,8 @@ type ApiResponse = {
   error?: string;
 };
 
-const API_BASE = "http://127.0.0.1:8765";
+// The Worker keeps the browser on one origin and forwards /api/* to Lean.
+const API_BASE = "";
 const EMPTY_SIZE = 7;
 
 type WorldLayer = { rank: number; name: string; tick: number };
@@ -632,7 +633,7 @@ export default function WorldHome() {
       setError(null);
     } catch {
       setConnected(false);
-      setError("Локальное ядро просыпается. Соединение восстановится автоматически…");
+      setError("Lean-ядро просыпается. Соединение восстановится автоматически…");
     }
   }, [acceptWorld]);
 
@@ -1373,7 +1374,7 @@ export default function WorldHome() {
         <div className="world-core" data-connected={connected}>
           <button className="story-replay" type="button" onClick={() => setMenuOpen(true)}>МЕНЮ</button>
           <span className="world-core-light" />
-          <div><b>{connected ? "LEAN-ЯДРО НА СВЯЗИ" : "МИР НЕДОСТУПЕН"}</b><small>{connected ? "каждый Imba + 1 подтверждён" : "ожидаем локальное ядро"}</small></div>
+          <div><b>{connected ? "LEAN-ЯДРО НА СВЯЗИ" : "МИР НЕДОСТУПЕН"}</b><small>{connected ? "каждый Imba + 1 подтверждён" : "ожидаем публичное Lean-ядро"}</small></div>
         </div>
       </header>
 

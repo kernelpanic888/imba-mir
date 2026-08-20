@@ -2,8 +2,10 @@
 
 Current release: **0.1.3**. See the [release journal](CHANGELOG.md).
 
-Local graphical interface for the single-square Imba World. It sends player
-actions to the Python HTTP bridge on `127.0.0.1:8765`; the bridge delegates
+Graphical interface for the single-square Imba World. It sends player actions
+to the same-origin `/api/*` boundary. Locally the Worker forwards that boundary
+to the Python service on `127.0.0.1:8765`; in production it uses the public
+HTTPS origin configured as `IMBA_API_ORIGIN`. The Python boundary delegates
 promotion, tick admission, defense, session memory, initiative, and certified
 combat continuation to the Lean executable.
 
@@ -34,5 +36,5 @@ npm run build
 npm test
 ```
 
-This UI is local by design: a hosted static copy would not have access to the
-machine-local Lean process.
+The public runtime contract, player-session isolation, and deployment checks
+are documented in [`../docs/PUBLIC_RUNTIME_PASSPORT.md`](../docs/PUBLIC_RUNTIME_PASSPORT.md).

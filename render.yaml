@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: imba-mir-lean-core
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: IMBA_COOKIE_SECURE
+        value: "1"
+      - key: IMBA_SESSION_TTL
+        value: "43200"
+      - key: IMBA_MAX_SESSIONS
+        value: "1000"

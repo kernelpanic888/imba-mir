@@ -234,7 +234,7 @@ const EN: Record<string, string> = {
   "LEAN-ЯДРО НА СВЯЗИ": "LEAN CORE ONLINE",
   "МИР НЕДОСТУПЕН": "WORLD UNAVAILABLE",
   "каждый Imba + 1 подтверждён": "every Imba + 1 is confirmed",
-  "ожидаем локальное ядро": "waiting for the local core",
+  "ожидаем публичное Lean-ядро": "waiting for the public Lean core",
   "ПОВТОРИТЬ": "RETRY",
   "ЦИКЛ": "CYCLE",
   "Закрыть состояние цикла": "Close cycle state",
@@ -493,7 +493,7 @@ const EN: Record<string, string> = {
 
   // Errors, decisions and dynamic status
   "Мир отклонил действие": "The World rejected the action",
-  "Локальное ядро просыпается. Соединение восстановится автоматически…": "The local core is waking. The connection will recover automatically…",
+  "Lean-ядро просыпается. Соединение восстановится автоматически…": "The Lean core is waking. The connection will recover automatically…",
   "Шаг не выполнен": "The step was not completed",
   "Код мира должен быть целым числом.": "The World code must be an integer.",
   "Новый Мир не создан": "The new World was not created",

@@ -1,11 +1,17 @@
-"""Local HTTP bridge for the single-domain graphical Imba interface."""
+"""HTTP boundary between the graphical Imba interface and its Lean core."""
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
+from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
+import re
+import secrets
 import threading
+import time
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
@@ -748,7 +754,7 @@ def _calculation(
 
 
 class GameSession:
-    """Thread-safe owner of one local run."""
+    """Thread-safe owner of one player's run."""
 
     def __init__(self, core: CoreClient, seed: int) -> None:
         version = core.ping()
@@ -810,20 +816,122 @@ class GameSession:
             return after
 
 
+@dataclass
+class _StoredSession:
+    game: GameSession
+    touched_at: float
+
+
+class SessionStore:
+    """Bounded, expiring collection of independent browser game sessions.
+
+    The store owns no game rules. Each session still delegates every formal
+    decision to the authoritative Lean executable.
+    """
+
+    _TOKEN = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
+
+    def __init__(
+        self,
+        core_command: str,
+        seed: int,
+        *,
+        ttl_seconds: int = 43_200,
+        max_sessions: int = 1_000,
+    ) -> None:
+        if ttl_seconds <= 0:
+            raise ValueError("session TTL must be positive")
+        if max_sessions <= 0:
+            raise ValueError("maximum sessions must be positive")
+        probe = CoreClient(core_command)
+        version = probe.ping()
+        if version != "0.1":
+            raise CoreError(f"unsupported core protocol {version!r}")
+        self.core_command = core_command
+        self.seed = seed
+        self.ttl_seconds = ttl_seconds
+        self.max_sessions = max_sessions
+        self.lock = threading.RLock()
+        self._sessions: dict[str, _StoredSession] = {}
+
+    def _cleanup_expired(self, now: float) -> None:
+        expired = [
+            token for token, stored in self._sessions.items()
+            if now - stored.touched_at >= self.ttl_seconds
+        ]
+        for token in expired:
+            del self._sessions[token]
+
+    def _make_room(self) -> None:
+        while len(self._sessions) >= self.max_sessions:
+            oldest = min(
+                self._sessions,
+                key=lambda item: self._sessions[item].touched_at,
+            )
+            del self._sessions[oldest]
+
+    def get(self, token: str | None) -> tuple[str, GameSession, bool]:
+        now = time.monotonic()
+        with self.lock:
+            self._cleanup_expired(now)
+            if token is not None and self._TOKEN.fullmatch(token):
+                stored = self._sessions.get(token)
+                if stored is not None:
+                    stored.touched_at = now
+                    return token, stored.game, False
+            self._make_room()
+            token = secrets.token_urlsafe(32)
+            game = GameSession(CoreClient(self.core_command), self.seed)
+            self._sessions[token] = _StoredSession(game=game, touched_at=now)
+            return token, game, True
+
+    def count(self) -> int:
+        with self.lock:
+            return len(self._sessions)
+
+
 class ImbaServer(ThreadingHTTPServer):
-    session: GameSession
+    daemon_threads = True
+    request_queue_size = 64
+    sessions: SessionStore
+    cookie_secure: bool
+    allowed_origin: str
 
 
 class ImbaHandler(BaseHTTPRequestHandler):
     server: ImbaServer
+    server_version = "ImbaCore/0.3"
+    sys_version = ""
+
+    def _session(self) -> GameSession:
+        cookie = SimpleCookie()
+        try:
+            cookie.load(self.headers.get("Cookie", ""))
+        except CookieError:
+            cookie = SimpleCookie()
+        morsel = cookie.get("imba_session")
+        supplied = morsel.value if morsel is not None else None
+        token, session, created = self.server.sessions.get(supplied)
+        if created:
+            secure = "; Secure" if self.server.cookie_secure else ""
+            self._set_cookie = (
+                f"imba_session={token}; Path=/; HttpOnly; SameSite=Lax{secure}"
+            )
+        return session
 
     def _headers(self, status: int) -> None:
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self.headers.get("Origin", "")
+        if self.server.allowed_origin and origin == self.server.allowed_origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if hasattr(self, "_set_cookie"):
+            self.send_header("Set-Cookie", self._set_cookie)
 
     def _send(self, value: object, status: int = 200) -> None:
         body = (json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
@@ -855,32 +963,38 @@ class ImbaHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         if path == "/api/state":
-            self._send({"ok": True, "state": self.server.session.state()})
+            self._send({"ok": True, "state": self._session().state()})
         elif path == "/api/health":
-            self._send({"ok": True, "protocol": "0.2"})
+            self._send({
+                "ok": True,
+                "protocol": "0.3",
+                "engine": "Lean 4 / imba-core",
+                "sessions": self.server.sessions.count(),
+            })
         else:
             self._send({"ok": False, "error": "not found"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        if path not in {"/api/action", "/api/reset"}:
+            self._send({"ok": False, "error": "not found"}, 404)
+            return
+        session = self._session()
         try:
             request = self._request()
             if path == "/api/action":
-                state = self.server.session.act(request)
-            elif path == "/api/reset":
-                state = self.server.session.reset(
+                state = session.act(request)
+            else:
+                state = session.reset(
                     _integer(request.get("seed"), "seed")
                 )
-            else:
-                self._send({"ok": False, "error": "not found"}, 404)
-                return
             self._send({"ok": True, "state": state})
         except (CoreError, OSError, ValueError) as exc:
             self._send(
                 {
                     "ok": False,
                     "error": str(exc),
-                    "state": self.server.session.state(),
+                    "state": session.state(),
                 },
                 400,
             )
@@ -890,20 +1004,28 @@ class ImbaHandler(BaseHTTPRequestHandler):
 
 
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description="Local HTTP bridge for Imba UI")
-    result.add_argument("--core", default="imba-core")
-    result.add_argument("--seed", type=int, default=20260813)
-    result.add_argument("--host", default="127.0.0.1")
-    result.add_argument("--port", type=int, default=8765)
+    result = argparse.ArgumentParser(description="HTTP bridge for the Imba UI")
+    result.add_argument("--core", default=os.environ.get("IMBA_CORE", "imba-core"))
+    result.add_argument("--seed", type=int, default=int(os.environ.get("IMBA_SEED", "20260813")))
+    result.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+    result.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8765")))
+    result.add_argument("--session-ttl", type=int, default=int(os.environ.get("IMBA_SESSION_TTL", "43200")))
+    result.add_argument("--max-sessions", type=int, default=int(os.environ.get("IMBA_MAX_SESSIONS", "1000")))
     return result
 
 
 def main() -> int:
     options = parser().parse_args()
-    session = GameSession(CoreClient(options.core), options.seed)
     server = ImbaServer((options.host, options.port), ImbaHandler)
-    server.session = session
-    print(f"Imba interface bridge: http://{options.host}:{options.port}", flush=True)
+    server.sessions = SessionStore(
+        options.core,
+        options.seed,
+        ttl_seconds=options.session_ttl,
+        max_sessions=options.max_sessions,
+    )
+    server.cookie_secure = os.environ.get("IMBA_COOKIE_SECURE", "0") == "1"
+    server.allowed_origin = os.environ.get("IMBA_ALLOWED_ORIGIN", "")
+    print(f"Imba Lean API: http://{options.host}:{options.port}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

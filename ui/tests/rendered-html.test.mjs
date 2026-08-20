@@ -15,6 +15,17 @@ async function render() {
   );
 }
 
+async function publicApiWithoutRuntime() {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("api-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  return worker.fetch(
+    new Request("https://example.test/api/state"),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+}
+
 test("server-renders the Imba game shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);
@@ -40,6 +51,15 @@ test("server-renders the Imba game shell", async () => {
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|Building your site/i);
 });
 
+test("public API fails honestly when the Lean runtime is not configured", async () => {
+  const response = await publicApiWithoutRuntime();
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    ok: false,
+    error: "The public Lean runtime is not configured yet.",
+  });
+});
+
 test("starter preview is fully removed", async () => {
   const [page, layout, styles, packageJson, sound, sources, formulaIndividual, i18n, storyTypes, storyRegistry, chapterZero, chapterOne, journeyLean] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
@@ -58,7 +78,8 @@ test("starter preview is fully removed", async () => {
   ]);
 
   assert.match(page, /"use client"/);
-  assert.match(page, /127\.0\.0\.1:8765/);
+  assert.match(page, /const API_BASE = ""/);
+  assert.doesNotMatch(page, /127\.0\.0\.1:8765/);
   assert.match(page, /roll_defense/);
   assert.match(page, /confirm_defense/);
   assert.match(page, /Результаты четырёх осей/);

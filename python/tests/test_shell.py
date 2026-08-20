@@ -15,7 +15,7 @@ from imba.core import (
 from imba.game import Game
 from imba.journal import Journal
 from imba.ui import render
-from imba.web import GameSession
+from imba.web import GameSession, SessionStore
 
 
 FAKE = pathlib.Path(__file__).with_name("fake_core.py")
@@ -196,6 +196,32 @@ def cast_valid_spell(session: GameSession) -> dict[str, object]:
 
 
 class WebInterfaceTests(unittest.TestCase):
+    def test_browser_sessions_are_independent_and_reusable(self) -> None:
+        store = SessionStore(f"{sys.executable} {FAKE}", 20260813, max_sessions=2)
+        first_token, first, first_created = store.get(None)
+        second_token, second, second_created = store.get(None)
+
+        self.assertTrue(first_created)
+        self.assertTrue(second_created)
+        self.assertNotEqual(first_token, second_token)
+        first.act({"action": "tick"})
+        self.assertEqual(first.state()["status"], "awaiting_spell")
+        self.assertEqual(second.state()["status"], "awaiting_tick")
+
+        returned_token, returned, returned_created = store.get(first_token)
+        self.assertEqual(returned_token, first_token)
+        self.assertIs(returned, first)
+        self.assertFalse(returned_created)
+
+    def test_session_store_rejects_unknown_tokens_and_stays_bounded(self) -> None:
+        store = SessionStore(f"{sys.executable} {FAKE}", 17, max_sessions=1)
+        first_token, _, _ = store.get(None)
+        second_token, _, created = store.get("not-a-valid-token")
+
+        self.assertTrue(created)
+        self.assertNotEqual(second_token, first_token)
+        self.assertEqual(store.count(), 1)
+
     def test_tick_requires_confirmation_before_imba_plus_one(self) -> None:
         session = GameSession(client(), 20260813)
         initial = session.state()
