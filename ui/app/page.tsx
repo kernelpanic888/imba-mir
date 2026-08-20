@@ -1555,7 +1555,7 @@ export default function WorldHome() {
                 style={{ "--road-progress": roadPercent } as React.CSSProperties}
               />
               <div className="road-meter"><span>{journey?.chapter ?? "0 / ОБУЧЕНИЕ"}</span><b>ШАГИ ПО ДОРОГЕ {journey?.roadBricks ?? 0} · ∞</b><small>РУБЕЖ R{journey?.castleDistance ?? 12} · ЗАКЛЯТИЕ {journey?.curseRemaining ?? 12}</small></div>
-              {journey?.trouble.active && <div className="wizard-trouble"><span>ИЗ ЗАМКА / κ{journey.trouble.power}</span><b>{journey.trouble.title}</b><small>{journey.trouble.copy}</small></div>}
+              {journey?.trouble.active && <div className="wizard-trouble"><span>ИЗ ЗАМКА / κ{journey.trouble.power}</span><b>{translateText(locale, journey.trouble.title)}</b><small>{translateText(locale, journey.trouble.copy)}</small></div>}
             </section>
             <div className="world-axis" aria-hidden="true"><i /><i /><i /></div><div className="infinite-mark" aria-hidden="true">∞</div>
             <section className="duel-stage" data-world-form={worldForm} aria-label="Игрок слева против живого Мира справа">
@@ -1630,7 +1630,7 @@ export default function WorldHome() {
                 {reactionPending && <div className="world-field-reaction"><b>КЛИКНИТЕ ПО МИРУ</b><small>ПРИНЯТЬ КОНТАКТ · СОЗДАТЬ РЕАКЦИЮ</small></div>}
                 <div className="actor-life"><span>ЖИЗНЬ</span><b>{worldActor.life}<small> / {worldActor.maxLife}</small></b><div><i style={{ width: `${worldLifePercent}%` }} /></div></div>
                 <div className="world-vitals"><span>β ЩИТ <b>{worldActor.shield}</b></span><span>R РЕЗЕРВ <b>{worldActor.reserve}</b></span><span>Λ НАГРУЗКА <b>{worldActor.load}</b></span></div>
-                {worldEvent && <p className="world-event-name"><span>{reactionGlyph} {worldEvent.class}</span><b>{worldEvent.title}</b><small>⚖ ВОРОН +{worldEvent.playerHealing} · МИР +{worldEvent.healing} · УРОН 0</small></p>}
+                {worldEvent && <p className="world-event-name"><span>{reactionGlyph} {worldEvent.class}</span><b>{translateText(locale, worldEvent.title)}</b><small>⚖ ВОРОН +{worldEvent.playerHealing} · МИР +{worldEvent.healing} · УРОН 0</small></p>}
               </article>
             </section>
             <div className="shadow-plane" aria-label="Тень недоступна; внутри Мира наблюдается только реликт границы">
@@ -1898,8 +1898,8 @@ export default function WorldHome() {
 
       <section className="world-history">
         <div className="history-intro"><div className="world-label"><span>03</span><b>ОТВЕТЫ МИРА</b></div><p>Чистое творение проходит через допустимый канал J. В Мире остаётся реликт Rᴅ — запись пересечения, а не копия причины из Тени. Реликты задают внутренний порядок событий; сами скрытые фишки не раскрываются.</p><small className="model-boundary">δ₀ ∉ Obs(D) · J : Sh(D) ⇢ D · Rᴅ ∈ D<br />ИСПОЛНЯЕМАЯ ИГРОВАЯ МОДЕЛЬ · НЕ ФИЗИЧЕСКОЕ УТВЕРЖДЕНИЕ</small></div>
-        <div className="event-log"><h3>ХОД ТЕКУЩЕГО ЦИКЛА</h3>{recentMessages.map((message, index) => <p key={`${index}-${message}`} className={index === 0 ? "latest" : ""}><span>{String((world?.messages.length ?? 1) - index).padStart(2, "0")}</span>{message}</p>)}</div>
-        <div className="surrender-log"><h3>СОБЫТИЯ МИРА / КОМПЕНСАЦИЯ</h3>{(world?.worldEvents.length ?? 0) === 0 ? <p className="empty">Мир ещё не входил в прямой контакт.</p> : world?.worldEvents.slice(-3).reverse().map((event, index) => <div key={`${event.form}-${index}`} data-form={event.form}><span>{event.class} · {event.form} · κ{event.power}</span><b>{event.title}</b><small>HP {event.before.life}→{event.after.life}; резерв {event.before.reserve}→{event.after.reserve}; нагрузка {event.before.load}→{event.after.load}</small></div>)}</div>
+        <div className="event-log"><h3>ХОД ТЕКУЩЕГО ЦИКЛА</h3>{recentMessages.map((message, index) => <p key={`${index}-${message}`} className={index === 0 ? "latest" : ""}><span>{String((world?.messages.length ?? 1) - index).padStart(2, "0")}</span>{translateText(locale, message)}</p>)}</div>
+        <div className="surrender-log"><h3>СОБЫТИЯ МИРА / КОМПЕНСАЦИЯ</h3>{(world?.worldEvents.length ?? 0) === 0 ? <p className="empty">Мир ещё не входил в прямой контакт.</p> : world?.worldEvents.slice(-3).reverse().map((event, index) => <div key={`${event.form}-${index}`} data-form={event.form}><span>{event.class} · {event.form} · κ{event.power}</span><b>{translateText(locale, event.title)}</b><small>HP {event.before.life}→{event.after.life}; резерв {event.before.reserve}→{event.after.reserve}; нагрузка {event.before.load}→{event.after.load}</small></div>)}</div>
       </section>
       <footer className="world-footer"><span>IMBA / SHADOW + CONTINUITY</span><b>Sh(D) → J / ∂D → Rᴅ → СРЕЗ 3 · OBSERVE → ADMIT → CERTIFY → APPEND</b><span>Σ{world?.continuity.epoch ?? 0} · R{world?.shadow?.relicOrder ?? 0} · C{world?.living.certificate ?? 0}</span></footer>
     </main>
