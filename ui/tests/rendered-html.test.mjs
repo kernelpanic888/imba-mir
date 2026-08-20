@@ -239,6 +239,10 @@ test("starter preview is fully removed", async () => {
   assert.match(i18n, /"β ЩИТ": "β SHIELD"/);
   assert.match(i18n, /Main life criterion/);
   assert.match(i18n, /The Raven’s road to the Emerald Castle/);
+  assert.match(i18n, /THE CURSE PREPARES ROAD STEP/);
+  assert.match(i18n, /ACT OF PURE CREATION \/ TICK/);
+  assert.match(i18n, /FORMULA ASSEMBLY:/);
+  assert.match(i18n, /MAGIC MOVES TOWARD THE WORLD/);
   assert.match(page, /realityFormulaIndividual/);
   assert.match(page, /liveFormulaIndividual/);
   assert.match(page, /header-formula-metrics/);
