@@ -1,6 +1,6 @@
 # Imba interface
 
-Current release: **0.1.4**. See the [release journal](CHANGELOG.md).
+Current release: **0.1.5**. See the [release journal](CHANGELOG.md).
 
 Graphical interface for the single-square Imba World. It sends player actions
 to the same-origin `/api/*` boundary. Locally the Worker forwards that boundary

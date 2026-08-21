@@ -103,6 +103,14 @@ test("initiative is presented as bounded balance capacity, never damage", async 
   assert.doesNotMatch(source, /firstStrike\?\.damage|lastStrikeDamage/);
 });
 
+test("mobile menu keeps every published chapter visible without a hidden horizontal strip", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*?\.game-menu-chapters \{ display: grid; grid-template-columns: repeat\(3,minmax\(0,1fr\)\);[^}]*overflow: visible/);
+  assert.match(styles, /\.game-menu-actions \.game-menu-chapters button \{ min-width: 0; min-height: 46px/);
+  assert.match(styles, /\.game-menu-actions \.game-menu-chapters button b \{ grid-row: 2; grid-column: 1;/);
+});
+
 test("the reality slice mirrors player input and Lean-backed state transitions", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
