@@ -105,6 +105,8 @@ def _conflict_progress(status: str) -> tuple[int, int]:
         "awaiting_defense_roll": (2, 7),
         "awaiting_plane": (3, 7),
         "defended": (4, 7),
+        "balance_crisis": (4, 7),
+        "raven_returned": (7, 7),
         "awaiting_world_reaction": (6, 7),
         "world_defeated": (7, 7),
     }[status]
@@ -136,6 +138,8 @@ def snapshot(game: WorldGame) -> dict[str, Any]:
         "awaiting_defense_roll": "Выбрать геометрию защиты",
         "awaiting_plane": "Выбрать и подтвердить плоскость",
         "defended": "Сдать стопку Миру",
+        "balance_crisis": "Восстановить утраченный баланс",
+        "raven_returned": "Начать новый забег из Тени",
         "awaiting_world_reaction": "Кликнуть по Миру: принять реакцию",
         "world_defeated": "Создать новый Мир",
     }[state.status]
@@ -189,14 +193,31 @@ def snapshot(game: WorldGame) -> dict[str, Any]:
         "chapterTwo": {
             "masteryMask": state.defense_mastery_mask,
             "seen": state.defense_mastery.seen if state.defense_mastery is not None else {
-                "THROW": False, "ANCHOR": False, "RIFT": False,
+                "THROW": state.defense_mastery_mask % 2 == 1,
+                "ANCHOR": (state.defense_mastery_mask // 2) % 2 == 1,
+                "RIFT": (state.defense_mastery_mask // 4) % 2 == 1,
             },
-            "mastered": state.defense_mastery.mastered if state.defense_mastery is not None else False,
+            "mastered": state.defense_mastery.mastered if state.defense_mastery is not None else state.defense_mastery_mask % 8 == 7,
             "balance": state.defense_mastery.balance if state.defense_mastery is not None else 100,
             "balanceHeld": state.defense_mastery.balance_held if state.defense_mastery is not None else True,
             "finaleAllowed": state.defense_mastery.finale_allowed if state.defense_mastery is not None else False,
             "status": state.defense_mastery.status if state.defense_mastery is not None else "LEARNING_GEOMETRIES",
         },
+        "balanceRecovery": {
+            "method": state.balance_recovery.method,
+            "ravenLifeBefore": state.balance_recovery.raven_life_before,
+            "worldLifeBefore": state.balance_recovery.world_life_before,
+            "ravenLifeAfter": state.balance_recovery.raven_life_after,
+            "worldLifeAfter": state.balance_recovery.world_life_after,
+            "balanceBefore": state.balance_recovery.balance_before,
+            "balanceAfter": state.balance_recovery.balance_after,
+            "playerHealing": state.balance_recovery.player_healing,
+            "worldHealing": state.balance_recovery.world_healing,
+            "tensionCost": state.balance_recovery.tension_cost,
+            "shadowCost": state.balance_recovery.shadow_cost,
+            "restored": state.balance_recovery.restored,
+            "reason": state.balance_recovery.reason,
+        } if state.balance_recovery is not None else None,
         "totalDamage": state.total_damage,
         "internalTension": state.internal_tension,
         "enemyDamage": state.enemy_damage,
@@ -205,7 +226,7 @@ def snapshot(game: WorldGame) -> dict[str, Any]:
                 "life": max(0, 100 - state.total_damage),
                 "maxLife": 100,
                 "damageTaken": state.total_damage,
-                "condition": "WOUNDED" if state.total_damage else "READY",
+                "condition": "RETURNED_TO_SHADOW" if state.total_damage >= 100 else "WOUNDED" if state.total_damage else "READY",
             },
             "world": _world_vitals(world_vitals) | {
                 "condition": world_condition,
@@ -421,7 +442,7 @@ def _calculation(
 
     This is deliberately a reduction/audit trace, not hidden model reasoning.
     """
-    rank_before = before["layers"][-1]["rank"]
+    rank_before = before["layers"][-1]["rank"] if before["layers"] else 0
     ticks_before = before["confirmedTicks"]
     certificate_before = before["living"]["certificate"]
     common: dict[str, Any] = {
@@ -678,6 +699,33 @@ def _calculation(
             "verdict": reaction["verdict"],
         }
 
+    if action == "recover_balance":
+        recovery = after["balanceRecovery"]
+        return common | {
+            "scene": "recovery",
+            "relation": "min(HPᵣ,HP𝑤) ↗; max(HPᵣ,HP𝑤) = const",
+            "signals": [
+                _signal("⚖₀", "БАЛАНС ДО", recovery["balanceBefore"], "warn"),
+                _signal("⚖₁", "БАЛАНС ПОСЛЕ", recovery["balanceAfter"]),
+                _signal("ΔR", "ЖИЗНЬ ВОРОНА", f"+{recovery['playerHealing']}"),
+                _signal("ΔW", "ЖИЗНЬ МИРА", f"+{recovery['worldHealing']}"),
+                _signal("τ", "ЦЕНА НАПРЯЖЕНИЯ", f"+{recovery['tensionCost']}", "hold"),
+                _signal("Sh", "ЦЕНА ТЕНИ", recovery["shadowCost"], "hold"),
+            ],
+            "title": "Восстановление живого баланса",
+            "theorem": "recoverBalance_does_not_harm ∧ recoverBalance_preserves_living_sides",
+            "equation": f"{recovery['method']}: ⚖ {recovery['balanceBefore']} → {recovery['balanceAfter']}; R {recovery['ravenLifeBefore']} → {recovery['ravenLifeAfter']}; W {recovery['worldLifeBefore']} → {recovery['worldLifeAfter']}",
+            "steps": [
+                _trace_step("CRISIS", f"lifeBalance={recovery['balanceBefore']}", "warn"),
+                _trace_step("METHOD", recovery["method"]),
+                _trace_step("RESTORE LOWER", f"R+{recovery['playerHealing']} · W+{recovery['worldHealing']}"),
+                _trace_step("CONSEQUENCE", f"τ+{recovery['tensionCost']} · Shadow+{recovery['shadowCost']}", "hold"),
+                _trace_step("CERTIFY", f"lifeBalance′={recovery['balanceAfter']} > 0"),
+            ],
+            "result": f"BALANCE {recovery['balanceAfter']}",
+            "verdict": "RESTORED",
+        }
+
     if action == "surrender":
         session = after["surrenders"][-1]
         memory = after["living"]["memory"]
@@ -845,7 +893,9 @@ class GameSession:
                 mastery_marks=self.game.state.progression.mastery_marks,
                 pending_choice=self.game.state.progression.pending_choice,
             )
+            defense_mastery_mask = self.game.state.defense_mastery_mask
             self.game = WorldGame(self.core, seed, progression=progress)
+            self.game.state.defense_mastery_mask = defense_mastery_mask
             after = snapshot(self.game)
             after["calculation"] = _calculation("reset", before, after)
             return after
@@ -873,6 +923,8 @@ class GameSession:
                 self.game.select_plane(_text(request.get("plane"), "plane"))
             elif action == "confirm_defense":
                 self.game.confirm_defense()
+            elif action == "recover_balance":
+                self.game.recover_balance(_text(request.get("method"), "method"))
             elif action == "first_strike":
                 self.game.first_strike()
             elif action == "world_reaction":

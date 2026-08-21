@@ -96,6 +96,21 @@ type ChapterTwoView = {
   finaleAllowed: boolean;
   status: "LEARNING_GEOMETRIES" | "KEEPER_OF_BALANCE";
 };
+type BalanceRecoveryView = {
+  method: "ANCHOR" | "REWIND" | "SHADOW";
+  ravenLifeBefore: number;
+  worldLifeBefore: number;
+  ravenLifeAfter: number;
+  worldLifeAfter: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  playerHealing: number;
+  worldHealing: number;
+  tensionCost: number;
+  shadowCost: number;
+  restored: boolean;
+  reason: string;
+};
 type FirstStrikeView = {
   allowed: boolean;
   capacity: number;
@@ -163,6 +178,7 @@ type CalculationSceneView =
   | "attack"
   | "reaction"
   | "progress"
+  | "recovery"
   | "reset"
   | "transition";
 type CalculationView = {
@@ -359,7 +375,7 @@ type JourneyView = {
 type WorldState = {
   seed: number;
   cycle: number;
-  status: "awaiting_tick" | "awaiting_spell" | "awaiting_defense_roll" | "awaiting_plane" | "awaiting_world_reaction" | "defended" | "world_defeated";
+  status: "awaiting_tick" | "awaiting_spell" | "awaiting_defense_roll" | "awaiting_plane" | "awaiting_world_reaction" | "defended" | "balance_crisis" | "raven_returned" | "world_defeated";
   confirmedTicks: number;
   pendingTick: number | null;
   layers: WorldLayer[];
@@ -371,6 +387,7 @@ type WorldState = {
   selectedPlane: string | null;
   defense: DefenseView | null;
   chapterTwo: ChapterTwoView;
+  balanceRecovery: BalanceRecoveryView | null;
   totalDamage: number;
   internalTension: number;
   enemyDamage: number;
@@ -390,7 +407,7 @@ type WorldState = {
   messages: string[];
 };
 type WorldResponse = { ok: boolean; state?: WorldState; error?: string };
-type WorldAction = "tick" | "cast_spell" | "roll_defense" | "choose_defense_method" | "select_plane" | "confirm_defense" | "first_strike" | "world_reaction" | "surrender" | "choose_protocol";
+type WorldAction = "tick" | "cast_spell" | "roll_defense" | "choose_defense_method" | "select_plane" | "confirm_defense" | "recover_balance" | "first_strike" | "world_reaction" | "surrender" | "choose_protocol";
 type CalculationAction = WorldAction | "reset";
 const DEFENSE_PLANE_IDS = ["XY", "XZ", "XW", "YZ", "YW", "ZW"] as const;
 
@@ -401,6 +418,7 @@ const pendingScene: Record<CalculationAction, CalculationSceneView> = {
   choose_defense_method: "axes",
   select_plane: "projection",
   confirm_defense: "conservation",
+  recover_balance: "recovery",
   surrender: "memory",
   first_strike: "attack",
   world_reaction: "reaction",
@@ -415,6 +433,7 @@ const REALITY_ACTION_GLYPHS: Record<CalculationAction, string> = {
   choose_defense_method: "◈",
   select_plane: "⊿",
   confirm_defense: "∥",
+  recover_balance: "⚖",
   first_strike: "⚖",
   world_reaction: "⇄",
   surrender: "Σ",
@@ -907,9 +926,11 @@ export default function WorldHome() {
   const nextTick = world ? world.confirmedTicks + 1 : 1;
   const visibleLayers = world?.layers ?? [current];
   const recentMessages = world?.messages.slice(-6).reverse() ?? ["Простая Imba проявлена из Тени."];
-  const natureActive = status === "awaiting_defense_roll" || status === "awaiting_plane" || status === "defended";
+  const natureActive = status === "awaiting_defense_roll" || status === "awaiting_plane" || status === "defended" || status === "balance_crisis" || status === "raven_returned";
   const reactionPending = status === "awaiting_world_reaction";
   const worldDefeated = status === "world_defeated";
+  const balanceCrisis = status === "balance_crisis";
+  const ravenReturned = status === "raven_returned";
   const progressChoicePending = world?.progression.pendingChoice ?? false;
   const spellLaw = world?.spell?.law ?? null;
   const spellSlots = (["SOURCE", "INTENT", "PATH", ...(spellLaw?.formRequired ? ["FORM" as const] : [])] as SpellSlot[]);
@@ -1046,7 +1067,7 @@ export default function WorldHome() {
           ? world?.selectedPlane ? `ПОДТВЕРДИТЬ ПЛОСКОСТЬ ${world.selectedPlane}` : "ВЫБЕРИТЕ ПЛОСКОСТЬ"
           : "СДАТЬ СТОПКУ МИРУ";
   const actionSymbol = action === "tick" ? "+1" : action === "cast_spell" || action === "confirm_defense" || action === "world_reaction" ? "✓" : action === "roll_defense" ? "◇" : "↺";
-  const actionDisabled = progressChoicePending || worldDefeated || busy || !connected || (advancedDefense && status === "awaiting_defense_roll") || (status === "awaiting_plane" && !world?.selectedPlane) || (status === "awaiting_spell" && !spellComplete);
+  const actionDisabled = progressChoicePending || worldDefeated || balanceCrisis || ravenReturned || busy || !connected || (advancedDefense && status === "awaiting_defense_roll") || (status === "awaiting_plane" && !world?.selectedPlane) || (status === "awaiting_spell" && !spellComplete);
   const decisionKicker = progressChoicePending
     ? "РУБЕЖ ХРОНИКИ ДОСТИГНУТ"
     : worldDefeated
@@ -1633,6 +1654,36 @@ export default function WorldHome() {
             <span>SOUND CUE / {SOUND_CUES[currentStoryBeat.cue].bus} / SILENT PLACEHOLDER</span>
             <button type="button" onClick={advanceStory}>{storyPlayback.beat === currentStoryScene.beats.length - 1 ? currentStoryScene.exitLabel : "ДАЛЕЕ"}<b>→</b></button>
           </footer>
+        </section>
+      )}
+      {!menuOpen && !storyPlayback && (balanceCrisis || ravenReturned) && (
+        <section className="balance-crisis" role="dialog" aria-modal="true" aria-labelledby="balance-crisis-title" data-terminal={ravenReturned}>
+          <img src="/balance-lost-v1.png" alt="Цифровой Ворон у разорванной линии баланса живого изумрудного Мира" width={1536} height={1024} />
+          <div className="balance-crisis-shade" />
+          <header>
+            <span>{ravenReturned ? "RUN / RETURN TO SHADOW" : "LEAN / LIFE BALANCE CRISIS"}</span>
+            <b>⚖ {world?.chapterTwo.balance ?? 0}</b>
+          </header>
+          <article>
+            <small>{ravenReturned ? (locale === "en" ? "THE RUN IS COMPLETE" : "ЗАБЕГ ЗАВЕРШЁН") : (locale === "en" ? "CONTACT IS PAUSED — CHOOSE THE CONSEQUENCE" : "КОНТАКТ ОСТАНОВЛЕН — ВЫБЕРИТЕ ПОСЛЕДСТВИЕ")}</small>
+            <h2 id="balance-crisis-title">{ravenReturned ? (locale === "en" ? "THE RAVEN RETURNED TO SHADOW" : "ВОРОН ВЕРНУЛСЯ В ТЕНЬ") : (locale === "en" ? "BALANCE LOST" : "БАЛАНС УТЕРЯН")}</h2>
+            <p>{ravenReturned
+              ? (locale === "en" ? "Raven life reached zero. The current path closes, but the Chronicle and mastered geometries remain. This is not the end of the story." : "Жизнь Ворона достигла нуля. Текущий путь закрыт, но Хроника и освоенные геометрии сохранены. Это не конец истории.")
+              : (locale === "en" ? "Both sides are still alive, therefore zero balance is recoverable. Lean will raise the lower life toward the higher one; every method leaves a different real cost." : "Обе стороны ещё живы, поэтому нулевой баланс можно вернуть. Lean поднимет меньшую жизнь к большей; каждый способ оставит свою настоящую цену.")}</p>
+          </article>
+          {balanceCrisis ? (
+            <div className="balance-recovery-choices">
+              <button type="button" disabled={busy || !connected} onClick={() => void actWorld("recover_balance", { method: "ANCHOR" })}><i>◎</i><span><b>{locale === "en" ? "ANCHOR" : "ЯКОРЬ"}</b><small>{locale === "en" ? "Strong restoration · tension +8 · Shadow 0" : "Сильное восстановление · напряжение +8 · Тень 0"}</small></span><em>⚖↑</em></button>
+              <button type="button" disabled={busy || !connected} onClick={() => void actWorld("recover_balance", { method: "REWIND" })}><i>↶</i><span><b>{locale === "en" ? "REWIND" : "ОТКАТ"}</b><small>{locale === "en" ? "Medium restoration · tension +3 · Shadow 1" : "Среднее восстановление · напряжение +3 · Тень 1"}</small></span><em>Sh+1</em></button>
+              <button type="button" disabled={busy || !connected} onClick={() => void actWorld("recover_balance", { method: "SHADOW" })}><i>◒</i><span><b>{locale === "en" ? "SHADOW" : "ТЕНЬ"}</b><small>{locale === "en" ? "Careful restoration · tension +5 · Shadow 2" : "Бережное восстановление · напряжение +5 · Тень 2"}</small></span><em>Sh+2</em></button>
+            </div>
+          ) : (
+            <div className="balance-return-actions">
+              <button type="button" disabled={busy || !connected} onClick={() => void resetWorld()}><span>{locale === "en" ? "BEGIN A NEW RUN" : "НАЧАТЬ НОВЫЙ ЗАБЕГ"}</span><b>↺</b></button>
+              <button type="button" onClick={() => setMenuOpen(true)}><span>{locale === "en" ? "RETURN TO CHAPTERS" : "ВЕРНУТЬСЯ К ГЛАВАМ"}</span><b>☰</b></button>
+            </div>
+          )}
+          <footer><span>lifeBalance = min(R,W) − |R−W|/2</span><b>{ravenReturned ? "HP(R)=0 ⇒ R→Sh(D)" : "HP(R)>0 ∧ HP(W)>0 ⇒ RECOVERY AVAILABLE"}</b></footer>
         </section>
       )}
       <header className="world-topbar">

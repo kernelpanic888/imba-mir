@@ -174,6 +174,33 @@ def main(args: list[str]) -> None:
                 "finaleAllowed": finale,
                 "status": "KEEPER_OF_BALANCE" if finale else "LEARNING_GEOMETRIES",
             })
+        if command == "balance-recover" and len(rest) == 3:
+            method = rest[0].upper()
+            raven_life, world_life = map(natural, rest[1:])
+            targets = {"ANCHOR": (24, 8, 0), "REWIND": (16, 3, 1), "SHADOW": (8, 5, 2)}
+            if method not in targets:
+                emit({"ok": False, "error": "bad balance recovery method"}, 2)
+            target, tension_cost, shadow_cost = targets[method]
+            raven_after, world_after = raven_life, world_life
+            if raven_life < world_life:
+                raven_after = min(world_life, raven_life + (world_life - raven_life) // 2 + target)
+            elif world_life < raven_life:
+                world_after = min(raven_life, world_life + (raven_life - world_life) // 2 + target)
+            lower_before = min(raven_life, world_life)
+            lower_after = min(raven_after, world_after)
+            balance_before = max(0, lower_before - (max(raven_life, world_life) - lower_before) // 2)
+            balance_after = max(0, lower_after - (max(raven_after, world_after) - lower_after) // 2)
+            emit({
+                "ok": True, "op": "balance-recover", "method": method,
+                "ravenLifeBefore": raven_life, "worldLifeBefore": world_life,
+                "ravenLifeAfter": raven_after, "worldLifeAfter": world_after,
+                "balanceBefore": balance_before, "balanceAfter": balance_after,
+                "playerHealing": raven_after - raven_life,
+                "worldHealing": world_after - world_life,
+                "tensionCost": tension_cost, "shadowCost": shadow_cost,
+                "restored": balance_after > 0,
+                "reason": "test-double balance recovery decision",
+            })
         if command == "first-strike" and len(rest) == 4:
             ticks, tension, reflection, used = map(natural, rest)
             if used not in {0, 1}:

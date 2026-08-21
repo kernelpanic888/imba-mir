@@ -1,5 +1,6 @@
 import Lean
 import Imba.Core
+import Imba.BalanceCrisis
 import Imba.Combat
 import Imba.Defense
 import Imba.Initiative
@@ -41,6 +42,12 @@ private def parseDefenseMethod : String → Option Imba.DefenseMethod
   | "THROW" | "throw" => some .throw
   | "ANCHOR" | "anchor" => some .anchor
   | "RIFT" | "rift" => some .rift
+  | _ => none
+
+private def parseBalanceRecoveryMethod : String → Option Imba.BalanceRecoveryMethod
+  | "ANCHOR" | "anchor" => some .anchor
+  | "REWIND" | "rewind" => some .rewind
+  | "SHADOW" | "shadow" => some .shadow
   | _ => none
 
 private def parseCombatActor : String → Option Imba.CombatActor
@@ -283,6 +290,35 @@ private def runDefenseMastery (maskText methodText ravenLifeText worldLifeText :
                     ("status", toJson (if Imba.chapterTwoFinaleAllowed result ravenLife worldLife then
                       "KEEPER_OF_BALANCE" else "LEARNING_GEOMETRIES"))
                   ])
+
+private def runBalanceRecovery (methodText ravenLifeText worldLifeText : String) :
+    IO UInt32 :=
+  match parseBalanceRecoveryMethod methodText with
+  | none => emit (failure "method must be ANCHOR, REWIND, or SHADOW") 2
+  | some method =>
+      match parseRank ravenLifeText with
+      | none => invalidNatural "raven life"
+      | some ravenLife =>
+          match parseRank worldLifeText with
+          | none => invalidNatural "world life"
+          | some worldLife =>
+              let answer := Imba.recoverBalance method ravenLife worldLife
+              emit (success [
+                ("op", toJson "balance-recover"),
+                ("method", toJson method.label),
+                ("ravenLifeBefore", toJson answer.ravenLifeBefore),
+                ("worldLifeBefore", toJson answer.worldLifeBefore),
+                ("ravenLifeAfter", toJson answer.ravenLifeAfter),
+                ("worldLifeAfter", toJson answer.worldLifeAfter),
+                ("balanceBefore", toJson answer.balanceBefore),
+                ("balanceAfter", toJson answer.balanceAfter),
+                ("playerHealing", toJson answer.playerHealing),
+                ("worldHealing", toJson answer.worldHealing),
+                ("tensionCost", toJson answer.tensionCost),
+                ("shadowCost", toJson answer.shadowCost),
+                ("restored", toJson answer.restored),
+                ("reason", toJson "the lower living side moves toward the higher one; the declared method cost remains as consequence")
+              ])
 
 private def runFirstStrike (ticksText tensionText reflectionText usedText : String) : IO UInt32 :=
   match parseRank ticksText with
@@ -852,6 +888,10 @@ def run (args : List String) : IO UInt32 :=
       runDefenseMastery mask method ravenLife worldLife
   | "defense-mastery" :: _ => wrongArity
       "imba-core defense-mastery <mask> <THROW|ANCHOR|RIFT> <raven-life> <world-life>"
+  | ["balance-recover", method, ravenLife, worldLife] =>
+      runBalanceRecovery method ravenLife worldLife
+  | "balance-recover" :: _ => wrongArity
+      "imba-core balance-recover <ANCHOR|REWIND|SHADOW> <raven-life> <world-life>"
   | ["first-strike", ticks, tension, reflection, used] =>
       runFirstStrike ticks tension reflection used
   | "first-strike" :: _ => wrongArity

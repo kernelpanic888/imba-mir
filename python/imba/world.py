@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 import random
 
 from .core import (
+    BalanceRecoveryAnswer,
     CombatAnswer,
     CoreClient,
     DefenseAnswer,
@@ -90,6 +91,7 @@ class WorldState:
     defense: DefenseAnswer | None = None
     defense_mastery_mask: int = 0
     defense_mastery: DefenseMasteryAnswer | None = None
+    balance_recovery: BalanceRecoveryAnswer | None = None
     total_damage: int = 0
     internal_tension: int = 0
     enemy_damage: int = 0
@@ -604,12 +606,76 @@ class WorldGame:
         if reaction.parent_head != attack.result_head:
             raise ValueError("защитная реакция не привязана к импульсу Природы")
         self.state.defense = answer
-        self.state.total_damage += answer.damage
+        self.state.total_damage = min(100, self.state.total_damage + answer.damage)
         self._refresh_defense_mastery(self.state.defense_method or "THROW")
-        self.state.status = "defended"
+        raven_life = max(0, 100 - self.state.total_damage)
+        if raven_life == 0:
+            self.state.status = "raven_returned"
+        elif self.state.defense_mastery is not None and self.state.defense_mastery.balance == 0:
+            self.state.status = "balance_crisis"
+        else:
+            self.state.status = "defended"
         self.state.messages.append(
             f"Реакция Σ{reaction.result_epoch} привязана к контакту h{reaction.parent_head}: "
             f"плоскость {answer.plane} поглотила {answer.absorbed}; Природа пробила {answer.damage}."
+        )
+        if self.state.status == "balance_crisis":
+            self.state.messages.append(
+                "БАЛАНС УТЕРЯН: контакт остановлен. Выберите Якорь, Откат или Тень; "
+                "Lean рассчитает восстановление и его цену."
+            )
+        elif self.state.status == "raven_returned":
+            returned = len(self.state.layers)
+            self._return_to_shadow(
+                returned,
+                f"Жизнь Ворона исчерпана; {returned} фишек текущей линии вернулись в Тень.",
+            )
+            self.state.layers.clear()
+            self.state.messages.append(
+                "ВОРОН ВЕРНУЛСЯ В ТЕНЬ. Забег завершён; Хроника и освоенные геометрии сохранены."
+            )
+
+    def recover_balance(self, method: str) -> None:
+        if self.state.status != "balance_crisis":
+            raise ValueError("восстановление доступно только при утраченном балансе")
+        raven_life = max(0, 100 - self.state.total_damage)
+        if raven_life == 0:
+            raise ValueError("Ворон уже вернулся в Тень; начните новый забег")
+        selected = method.upper()
+        if selected not in {"ANCHOR", "REWIND", "SHADOW"}:
+            raise ValueError("неизвестный способ восстановления баланса")
+        answer = self.core.balance_recover(
+            selected, raven_life, self.state.world_vitals.life
+        )
+        if not answer.restored:
+            raise ValueError("Lean не подтвердил восстановление положительного баланса")
+        self.state.balance_recovery = answer
+        self.state.total_damage = max(0, 100 - answer.raven_life_after)
+        self.state.world_vitals = WorldVitalsAnswer(
+            life=answer.world_life_after,
+            max_life=self.state.world_vitals.max_life,
+            reserve=self.state.world_vitals.reserve,
+            load=self.state.world_vitals.load,
+            shield=self.state.world_vitals.shield,
+        )
+        self.state.internal_tension += answer.tension_cost
+        returned = min(answer.shadow_cost, len(self.state.layers))
+        if returned:
+            self._return_to_shadow(
+                returned,
+                f"{selected}: цена восстановления вернула {returned} фишек в Тень.",
+            )
+            del self.state.layers[-returned:]
+            if not self.state.layers:
+                initial = Layer(rank=1, name=self.core.name(1), tick=0)
+                self.state.layers.append(initial)
+                self._pure_creation(initial)
+        self._refresh_defense_mastery()
+        self.state.status = "defended"
+        self.state.messages.append(
+            f"{selected}: баланс {answer.balance_before}→{answer.balance_after}; "
+            f"Ворон +{answer.player_healing}, Мир +{answer.world_healing}, "
+            f"напряжение +{answer.tension_cost}, Тень +{returned}."
         )
 
     def surrender(self) -> None:

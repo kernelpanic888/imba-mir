@@ -78,6 +78,23 @@ class DefenseMasteryAnswer:
 
 
 @dataclass(frozen=True)
+class BalanceRecoveryAnswer:
+    method: str
+    raven_life_before: int
+    world_life_before: int
+    raven_life_after: int
+    world_life_after: int
+    balance_before: int
+    balance_after: int
+    player_healing: int
+    world_healing: int
+    tension_cost: int
+    shadow_cost: int
+    restored: bool
+    reason: str
+
+
+@dataclass(frozen=True)
 class FirstStrikeAnswer:
     allowed: bool
     confirmed_ticks: int
@@ -566,6 +583,42 @@ class CoreClient:
             or answer.finale_allowed != expected_finale
         ):
             raise CoreProtocolError("chapter-II finale certificate is inconsistent")
+        return answer
+
+    def balance_recover(
+        self, method: str, raven_life: int, world_life: int
+    ) -> BalanceRecoveryAnswer:
+        selected = method.upper()
+        payload = self._call("balance-recover", selected, raven_life, world_life)
+        answer = BalanceRecoveryAnswer(
+            method=self._field(payload, "method", str),
+            raven_life_before=self._field(payload, "ravenLifeBefore", int),
+            world_life_before=self._field(payload, "worldLifeBefore", int),
+            raven_life_after=self._field(payload, "ravenLifeAfter", int),
+            world_life_after=self._field(payload, "worldLifeAfter", int),
+            balance_before=self._field(payload, "balanceBefore", int),
+            balance_after=self._field(payload, "balanceAfter", int),
+            player_healing=self._field(payload, "playerHealing", int),
+            world_healing=self._field(payload, "worldHealing", int),
+            tension_cost=self._field(payload, "tensionCost", int),
+            shadow_cost=self._field(payload, "shadowCost", int),
+            restored=self._field(payload, "restored", bool),
+            reason=self._field(payload, "reason", str),
+        )
+        if (
+            answer.method != selected
+            or answer.raven_life_before != raven_life
+            or answer.world_life_before != world_life
+        ):
+            raise CoreProtocolError("core echoed different balance recovery inputs")
+        if (
+            answer.raven_life_after != raven_life + answer.player_healing
+            or answer.world_life_after != world_life + answer.world_healing
+            or answer.raven_life_after < raven_life
+            or answer.world_life_after < world_life
+            or answer.restored != (answer.balance_after > 0)
+        ):
+            raise CoreProtocolError("balance recovery violated its living-side contract")
         return answer
 
     def first_strike(

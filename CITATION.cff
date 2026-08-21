@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "If you use this project, please cite it as follows."
 title: "IMBA / МИР"
 type: software
-version: 0.1.2
-date-released: 2026-08-16
+version: 0.1.7
+date-released: 2026-08-21
 authors:
   - family-names: Salkutsan
     given-names: Aleksey

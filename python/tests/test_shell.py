@@ -63,6 +63,10 @@ class CoreClientTests(unittest.TestCase):
         unbalanced = core.defense_mastery(7, "RIFT", 70, 100)
         self.assertEqual(unbalanced.balance, 55)
         self.assertFalse(unbalanced.finale_allowed)
+        recovery = core.balance_recover("REWIND", 33, 100)
+        self.assertEqual((recovery.balance_before, recovery.balance_after), (0, 73))
+        self.assertEqual((recovery.player_healing, recovery.tension_cost, recovery.shadow_cost), (49, 3, 1))
+        self.assertTrue(recovery.restored)
         locked = core.first_strike(2, 0, 0, False)
         self.assertFalse(locked.allowed)
         strike = core.first_strike(2, 5, 3, False)
@@ -438,6 +442,7 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(struck["calculation"]["scene"], "attack")
         self.assertFalse(struck["firstStrikeUsed"])
         self.assertEqual(struck["enemyDamage"], 0)
+
         player_life_before = struck["actors"]["player"]["life"]
         world_life_before = struck["actors"]["world"]["life"]
         player_attack = struck["continuity"]["pendingAttack"]
@@ -484,6 +489,43 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(reset["calculation"]["verdict"], "GENESIS")
         self.assertEqual(reset["progression"]["discovered"], [reaction_form])
         self.assertEqual(reset["progression"]["activeProtocol"]["id"], "FORECAST")
+
+    def test_zero_balance_is_recoverable_but_zero_raven_life_ends_the_run(self) -> None:
+        crisis = GameSession(client(), 20260813)
+        crisis.game._interruption_rank = 2
+        crisis.act({"action": "tick"})
+        cast_valid_spell(crisis)
+        crisis.act({"action": "roll_defense"})
+        crisis.act({"action": "select_plane", "plane": "XY"})
+        crisis.game.state.total_damage = 67
+        broken = crisis.act({"action": "confirm_defense"})
+        self.assertEqual(broken["status"], "balance_crisis")
+        self.assertGreater(broken["actors"]["player"]["life"], 0)
+        self.assertEqual(broken["chapterTwo"]["balance"], 0)
+
+        restored = crisis.act({"action": "recover_balance", "method": "SHADOW"})
+        self.assertEqual(restored["status"], "defended")
+        self.assertTrue(restored["balanceRecovery"]["restored"])
+        self.assertGreater(restored["balanceRecovery"]["balanceAfter"], 0)
+        self.assertEqual(restored["calculation"]["scene"], "recovery")
+        self.assertIn("recoverBalance_does_not_harm", restored["calculation"]["theorem"])
+
+        ended = GameSession(client(), 20260813)
+        ended.game._interruption_rank = 2
+        ended.act({"action": "tick"})
+        cast_valid_spell(ended)
+        ended.act({"action": "roll_defense"})
+        ended.act({"action": "select_plane", "plane": "XY"})
+        ended.game.state.total_damage = 100
+        terminal = ended.act({"action": "confirm_defense"})
+        self.assertEqual(terminal["status"], "raven_returned")
+        self.assertEqual(terminal["actors"]["player"]["life"], 0)
+        mastered_before_reset = terminal["chapterTwo"]["masteryMask"]
+        with self.assertRaisesRegex(ValueError, "восстановление"):
+            ended.act({"action": "recover_balance", "method": "ANCHOR"})
+        reborn = ended.reset(20260814)
+        self.assertEqual(reborn["chapterTwo"]["masteryMask"], mastered_before_reset)
+        self.assertTrue(reborn["chapterTwo"]["seen"]["THROW"])
 
     def test_refraction_protocol_previews_damage_without_applying_it(self) -> None:
         session = GameSession(client(), 20260813)

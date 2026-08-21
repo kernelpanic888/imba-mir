@@ -3632,3 +3632,58 @@ html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: n
   }
   .state-awaiting_spell .magic-stage-pane .spell-repair-route { min-height: 104px; padding: 5px 7px; }
 }
+
+/* Zero balance is a recoverable theorem-backed crisis. Raven life at zero is
+   the terminal state of the current run, while Chronicle progress survives. */
+.balance-crisis {
+  position: absolute;
+  z-index: 620;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0,1fr) auto auto;
+  gap: clamp(10px,2vh,22px);
+  padding: clamp(18px,3.2vh,42px) clamp(20px,5vw,88px);
+  overflow: hidden;
+  color: var(--world-bone);
+  background: #020807;
+  isolation: isolate;
+}
+.balance-crisis > img { position: absolute; z-index: -3; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; filter: saturate(.9) brightness(.72); }
+.balance-crisis-shade { position: absolute; z-index: -2; inset: 0; background: linear-gradient(90deg,rgba(1,7,6,.95) 0%,rgba(1,7,6,.68) 46%,rgba(1,7,6,.2) 74%,rgba(1,7,6,.76) 100%),linear-gradient(0deg,rgba(1,7,6,.94),transparent 36%,rgba(1,7,6,.65)); }
+.balance-crisis::after { content: ""; position: absolute; z-index: -1; inset: 0; border: 2px solid var(--world-cut); box-shadow: inset 0 0 80px rgba(255,111,91,.13); pointer-events: none; animation: crisis-border 2.8s ease-in-out infinite; }
+.balance-crisis > header { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,111,91,.65); color: var(--world-cut); font: 900 clamp(9px,1vw,14px)/1 ui-monospace,monospace; letter-spacing: .14em; }
+.balance-crisis > header b { color: var(--world-bone); font-size: clamp(20px,2vw,34px); }
+.balance-crisis > article { width: min(780px,76%); align-self: end; display: grid; gap: clamp(9px,1.6vh,18px); }
+.balance-crisis > article small { color: var(--world-cut); font: 900 clamp(9px,.9vw,13px)/1.2 ui-monospace,monospace; letter-spacing: .12em; }
+.balance-crisis > article h2 { margin: 0; max-width: 980px; color: var(--world-bone); font: 950 clamp(42px,7.2vw,112px)/.82 "Arial Narrow","Helvetica Neue",sans-serif; letter-spacing: -.055em; text-wrap: balance; text-shadow: 0 0 35px rgba(255,111,91,.2); }
+.balance-crisis > article p { max-width: 720px; margin: 0; color: #b7c7c0; font: 650 clamp(12px,1.15vw,18px)/1.48 ui-monospace,monospace; }
+.balance-recovery-choices { width: min(1100px,100%); display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: clamp(7px,1vw,14px); }
+.balance-recovery-choices button,.balance-return-actions button { min-width: 0; min-height: clamp(76px,10vh,112px); display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 13px 15px; border: 1px solid rgba(255,111,91,.68); background: linear-gradient(120deg,rgba(59,20,17,.91),rgba(2,18,13,.88)); color: var(--world-bone); text-align: left; cursor: pointer; transition: transform .16s ease,border-color .16s ease,background .16s ease; }
+.balance-recovery-choices button:hover,.balance-recovery-choices button:focus-visible,.balance-return-actions button:hover,.balance-return-actions button:focus-visible { transform: translateY(-4px); border-color: var(--world-acid); background: rgba(12,54,36,.94); outline: none; }
+.balance-recovery-choices button:disabled,.balance-return-actions button:disabled { opacity: .45; cursor: wait; }
+.balance-recovery-choices i { color: var(--world-cyan); font: normal 900 clamp(28px,3vw,46px)/1 ui-monospace,monospace; }
+.balance-recovery-choices span { min-width: 0; display: grid; gap: 7px; }
+.balance-recovery-choices b,.balance-return-actions span { font: 950 clamp(14px,1.35vw,21px)/1 ui-monospace,monospace; letter-spacing: .08em; }
+.balance-recovery-choices small { color: var(--world-dim); font: 750 clamp(7px,.68vw,10px)/1.3 ui-monospace,monospace; }
+.balance-recovery-choices em { color: var(--world-acid); font: normal 900 clamp(9px,.9vw,13px)/1 ui-monospace,monospace; white-space: nowrap; }
+.balance-return-actions { width: min(800px,100%); display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.balance-return-actions button { grid-template-columns: 1fr auto; }
+.balance-return-actions b { color: var(--world-cyan); font-size: 28px; }
+.balance-crisis > footer { display: flex; justify-content: space-between; gap: 20px; padding-top: 11px; border-top: 1px solid rgba(105,178,176,.35); color: var(--world-dim); font: 800 clamp(7px,.7vw,10px)/1 ui-monospace,monospace; letter-spacing: .09em; }
+.balance-crisis > footer b { color: var(--world-moss); }
+.balance-crisis[data-terminal="true"]::after { border-color: var(--world-shadow); box-shadow: inset 0 0 90px rgba(123,108,231,.18); }
+.balance-crisis[data-terminal="true"] > img { filter: saturate(.58) brightness(.53); }
+@keyframes crisis-border { 0%,100% { opacity: .58; } 50% { opacity: 1; } }
+@media (max-width: 760px) {
+  .balance-crisis { padding: 15px; grid-template-rows: auto minmax(0,1fr) auto auto; }
+  .balance-crisis > article { width: 100%; }
+  .balance-crisis > article h2 { font-size: clamp(38px,13vw,66px); }
+  .balance-crisis > article p { font-size: 11px; }
+  .balance-recovery-choices { grid-template-columns: 1fr; gap: 6px; }
+  .balance-recovery-choices button { min-height: 58px; padding: 8px 10px; }
+  .balance-recovery-choices i { font-size: 25px; }
+  .balance-return-actions { grid-template-columns: 1fr; gap: 6px; }
+  .balance-return-actions button { min-height: 58px; }
+  .balance-crisis > footer span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .balance-crisis::after { animation: none; } }

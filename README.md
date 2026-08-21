@@ -9,7 +9,7 @@
 
 **Author:** [Aleksey Salkutsan](AUTHORS.md)
 
-**Source release:** `v0.1.6`
+**Source release:** `v0.1.7`
 
 **Repository:** [github.com/kernelpanic888/imba-mir](https://github.com/kernelpanic888/imba-mir)
 

@@ -59,6 +59,7 @@ contract: build-lean
 	$(CORE) defense-roll 20260813 1 5
 	$(CORE) defense-resolve 20260813 1 5 XY
 	$(CORE) defense-mastery 3 RIFT 100 100
+	$(CORE) balance-recover ANCHOR 33 100
 	$(CORE) first-strike 3 8 2 0
 	$(CORE) tension-carry 8 3 2
 	$(CORE) living-admit 0 0 0 0 3 2 XY

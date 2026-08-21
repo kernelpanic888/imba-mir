@@ -1,4 +1,5 @@
 import Imba.Core
+import Imba.BalanceCrisis
 import Imba.Combat
 import Imba.Defense
 import Imba.Initiative
@@ -82,6 +83,13 @@ example : lifeBalance 100 100 = 100 := by decide
 example : lifeBalance 70 100 = 55 := by decide
 example : chapterTwoFinaleAllowed 7 100 100 = true := by decide
 example : chapterTwoFinaleAllowed 3 100 100 = false := by decide
+example : (recoverBalance .anchor 33 100).ravenLifeAfter = 90 := by decide
+example : (recoverBalance .rewind 33 100).balanceAfter = 73 := by decide
+example : (recoverBalance .shadow 33 100).restored = true := by decide
+example (method : BalanceRecoveryMethod) (ravenLife worldLife : Nat) :
+    ravenLife ≤ (recoverBalance method ravenLife worldLife).ravenLifeAfter ∧
+      worldLife ≤ (recoverBalance method ravenLife worldLife).worldLifeAfter :=
+  recoverBalance_does_not_harm method ravenLife worldLife
 
 example : sessionTension 0 0 = 1 := by decide
 example : carryTension 7 0 0 = 8 := by decide

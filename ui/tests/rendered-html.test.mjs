@@ -153,6 +153,21 @@ test("the reality slice mirrors player input and Lean-backed state transitions",
   assert.match(styles, /@keyframes balance-panel-gain/);
 });
 
+test("zero balance pauses the run for a certified recovery and zero Raven life returns to Shadow", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  await access(new URL("../public/balance-lost-v1.png", import.meta.url));
+
+  assert.match(source, /status === "balance_crisis"/);
+  assert.match(source, /status === "raven_returned"/);
+  assert.match(source, /actWorld\("recover_balance", \{ method: "ANCHOR" \}\)/);
+  assert.match(source, /actWorld\("recover_balance", \{ method: "REWIND" \}\)/);
+  assert.match(source, /actWorld\("recover_balance", \{ method: "SHADOW" \}\)/);
+  assert.match(source, /lifeBalance = min\(R,W\)/);
+  assert.match(styles, /\.balance-crisis/);
+  assert.match(styles, /\.balance-recovery-choices/);
+});
+
 test("public API fails honestly when the Lean runtime is not configured", async () => {
   const response = await publicApiWithoutRuntime();
   assert.equal(response.status, 503);
