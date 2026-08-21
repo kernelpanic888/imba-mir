@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import operator
 import sys
+from itertools import product
 
 
 def emit(value: dict[str, object], status: int = 0) -> None:
@@ -67,8 +68,21 @@ def main(args: list[str]) -> None:
                     "name": f"rank-{result}",
                 }
             )
-        if command in {"defense-roll", "defense-resolve"} and len(rest) in {3, 4}:
+        if (
+            command == "defense-roll" and len(rest) in {3, 4}
+        ) or (
+            command == "defense-resolve" and len(rest) in {4, 5}
+        ):
             seed, cycle, interrupted_rank = map(natural, rest[:3])
+            method = (
+                rest[3].upper()
+                if command == "defense-roll" and len(rest) == 4
+                else rest[4].upper()
+                if command == "defense-resolve" and len(rest) == 5
+                else "THROW"
+            )
+            if method not in {"THROW", "ANCHOR", "RIFT"}:
+                emit({"ok": False, "error": "bad defense method"}, 2)
             def face(salt: int) -> int:
                 return (
                     seed * 1664525
@@ -77,6 +91,17 @@ def main(args: list[str]) -> None:
                     + salt * 362437
                 ) % 6 + 1
             x, y, z, w = (face(index) for index in range(4))
+            if method == "ANCHOR":
+                xy, zw = x + y, z + w
+                x, y, z, w = xy // 2, xy - xy // 2, zw // 2, zw - zw // 2
+            elif method == "RIFT":
+                total = x + y + z + w
+                if total % 3 == 0:
+                    x, y, z, w = 1, x + y - 1, 1, z + w - 1
+                elif total % 3 == 1:
+                    x, y, z, w = 1, 1, x + z - 1, y + w - 1
+                else:
+                    x, y, z, w = 1, 1, y + z - 1, x + w - 1
             planes = {
                 "XY": x + y, "XZ": x + z, "XW": x + w,
                 "YZ": y + z, "YW": y + w, "ZW": z + w,
@@ -86,6 +111,7 @@ def main(args: list[str]) -> None:
             fields: dict[str, object] = {
                 "ok": True,
                 "op": command,
+                "method": method,
                 "seed": seed,
                 "cycle": cycle,
                 "interruptedRank": interrupted_rank,
@@ -93,9 +119,9 @@ def main(args: list[str]) -> None:
                 "x": x, "y": y, "z": z, "w": w,
                 **{key.lower(): value for key, value in planes.items()},
             }
-            if command == "defense-roll" and len(rest) == 3:
+            if command == "defense-roll":
                 emit(fields)
-            if command == "defense-resolve" and len(rest) == 4:
+            if command == "defense-resolve":
                 plane = rest[3].upper()
                 if plane not in planes:
                     emit({"ok": False, "error": "bad plane"}, 2)
@@ -112,6 +138,42 @@ def main(args: list[str]) -> None:
                     "reason": "test-double defense decision",
                 })
                 emit(fields)
+        if command == "defense-mastery" and len(rest) == 4:
+            mask = natural(rest[0]) % 8
+            method = rest[1].upper()
+            raven_life = natural(rest[2])
+            world_life = natural(rest[3])
+            bits = {"THROW": 1, "ANCHOR": 2, "RIFT": 4}
+            if method not in bits:
+                emit({"ok": False, "error": "bad defense method"}, 2)
+            bit = bits[method]
+            result = mask if mask & bit else mask + bit
+            seen = {
+                "THROW": bool(result & 1),
+                "ANCHOR": bool(result & 2),
+                "RIFT": bool(result & 4),
+            }
+            lower = min(raven_life, world_life)
+            balance = max(0, lower - (max(raven_life, world_life) - lower) // 2)
+            mastered = all(seen.values())
+            finale = mastered and raven_life > 0 and world_life > 0 and balance >= 65
+            emit({
+                "ok": True,
+                "op": "defense-mastery",
+                "previousMask": mask,
+                "method": method,
+                "masteryMask": result,
+                "throwSeen": seen["THROW"],
+                "anchorSeen": seen["ANCHOR"],
+                "riftSeen": seen["RIFT"],
+                "mastered": mastered,
+                "ravenLife": raven_life,
+                "worldLife": world_life,
+                "balance": balance,
+                "balanceHeld": balance >= 65,
+                "finaleAllowed": finale,
+                "status": "KEEPER_OF_BALANCE" if finale else "LEARNING_GEOMETRIES",
+            })
         if command == "first-strike" and len(rest) == 4:
             ticks, tension, reflection, used = map(natural, rest)
             if used not in {0, 1}:
@@ -355,7 +417,7 @@ def main(args: list[str]) -> None:
                 "pendingChoice": False if allowed else protocols == 0 and marks > 0,
                 "reason": "test-double protocol unlock",
             })
-        if command in {"spell-law", "spell-cast"} and len(rest) in {6, 10}:
+        if command in {"spell-law", "spell-cast", "spell-repair"} and len(rest) in {6, 10}:
             identity, cycle, pending_tick, rank, certificate, mastery_marks = map(natural, rest[:6])
             term_data = {
                 "WILL": ("Собери волю", 2, 1, 0),
@@ -426,10 +488,12 @@ def main(args: list[str]) -> None:
                 })
             if command == "spell-law" and len(rest) == 6:
                 emit(fields)
-            if command == "spell-cast" and len(rest) == 10:
-                source, intent, path, form = (value.upper() for value in rest[6:])
-                if source not in {"WILL", "SHADOW", "MEMORY", "SPARK"} or intent not in {"RELEASE", "REVEAL", "BIND", "INVERT"} or path not in {"ROAD", "ECHO", "RIFT", "ORBIT"} or form not in {"DORMANT", "BLADE", "VEIL", "PRISM"}:
-                    emit({"ok": False, "error": "bad spell term"}, 2)
+            source_ids = ("WILL", "SHADOW", "MEMORY", "SPARK")
+            intent_ids = ("RELEASE", "REVEAL", "BIND", "INVERT")
+            path_ids = ("ROAD", "ECHO", "RIFT", "ORBIT")
+            form_ids = ("DORMANT", "BLADE", "VEIL", "PRISM")
+
+            def evaluate_spell(source: str, intent: str, path: str, form: str) -> dict[str, object]:
                 synergy = "NONE"
                 if form == "VEIL" and source == "MEMORY" and path == "ECHO":
                     synergy = "REMEMBRANCE"
@@ -454,9 +518,6 @@ def main(args: list[str]) -> None:
                 resonance += synergy_term[3] * multiplier
                 checks = (force >= needs[0], coherence >= needs[1], resonance >= needs[2])
                 deficit = max(0, needs[0] - force) + max(0, needs[1] - coherence) + max(0, needs[2] - resonance)
-                source_ids = ("WILL", "SHADOW", "MEMORY", "SPARK")
-                intent_ids = ("RELEASE", "REVEAL", "BIND", "INVERT")
-                path_ids = ("ROAD", "ECHO", "RIFT", "ORBIT")
                 terms_allowed = (
                     source_ids.index(source) != lexicon_variant
                     and intent_ids.index(intent) != (lexicon_variant + 1) % 4
@@ -465,7 +526,7 @@ def main(args: list[str]) -> None:
                 structure_ok = terms_allowed and form_required == (form != "DORMANT") and (not synergy_required or synergy != "NONE")
                 outcome = "APPEND" if structure_ok and all(checks) else "APPEND_WITH_COST" if structure_ok and deficit == 1 else "HOLD"
                 admitted = outcome != "HOLD"
-                fields.update({
+                return {
                     "source": source, "sourcePhrase": term_data[source][0],
                     "intent": intent, "intentPhrase": term_data[intent][0],
                     "path": path, "pathPhrase": term_data[path][0],
@@ -480,6 +541,56 @@ def main(args: list[str]) -> None:
                     "cost": 1 if outcome == "APPEND_WITH_COST" else 0,
                     "preservesIdentity": admitted, "extendsCertificate": admitted,
                     "reason": "test-double spell morphism decision",
+                }
+
+            if command in {"spell-cast", "spell-repair"} and len(rest) == 10:
+                source, intent, path, form = (value.upper() for value in rest[6:])
+                if source not in source_ids or intent not in intent_ids or path not in path_ids or form not in form_ids:
+                    emit({"ok": False, "error": "bad spell term"}, 2)
+
+            if command == "spell-cast" and len(rest) == 10:
+                fields.update(evaluate_spell(source, intent, path, form))
+                emit(fields)
+
+            if command == "spell-repair" and len(rest) == 10:
+                current = (source, intent, path, form)
+                candidates: list[tuple[tuple[int, int], tuple[str, str, str, str], dict[str, object]]] = []
+                for candidate in product(source_ids, intent_ids, path_ids, form_ids):
+                    result = evaluate_spell(*candidate)
+                    if result["outcome"] != "HOLD":
+                        distance = sum(left != right for left, right in zip(current, candidate))
+                        candidates.append(((distance, int(result["cost"])), candidate, result))
+                _, target, result = min(candidates, key=lambda item: item[0])
+                changed = tuple(left != right for left, right in zip(current, target))
+                replacements = sum(changed)
+                target_source, target_intent, target_path, target_form = target
+                fields.update({
+                    "currentSource": source,
+                    "currentIntent": intent,
+                    "currentPath": path,
+                    "currentForm": form,
+                    "targetSource": target_source,
+                    "targetSourcePhrase": term_data[target_source][0],
+                    "targetIntent": target_intent,
+                    "targetIntentPhrase": term_data[target_intent][0],
+                    "targetPath": target_path,
+                    "targetPathPhrase": term_data[target_path][0],
+                    "targetForm": target_form,
+                    "targetFormPhrase": term_data[target_form][0],
+                    "targetSynergy": result["synergy"],
+                    "targetSynergyTitle": result["synergyTitle"],
+                    "targetForce": result["force"],
+                    "targetCoherence": result["coherence"],
+                    "targetResonance": result["resonance"],
+                    "targetOutcome": result["outcome"],
+                    "replacements": replacements,
+                    "tensionCost": result["cost"],
+                    "changeSource": changed[0],
+                    "changeIntent": changed[1],
+                    "changePath": changed[2],
+                    "changeForm": changed[3],
+                    "consequence": "route step: formula draft only; target confirmation: rank +1; certificate +1; tension +1" if result["cost"] else "route step: formula draft only; target confirmation: rank +1; certificate +1; tension unchanged",
+                    "reason": "minimal admitted reconstruction; distance first, declared tension second",
                 })
                 emit(fields)
         if command == "journey" and len(rest) == 2:

@@ -44,6 +44,25 @@ class CoreClientTests(unittest.TestCase):
         self.assertEqual(defense.damage, 10)
         self.assertFalse(defense.fully_blocked)
         self.assertEqual(defense.complement_plane, "ZW")
+        geometries = {
+            method: core.defense_roll(20260813, 1, 3, method)
+            for method in ("THROW", "ANCHOR", "RIFT")
+        }
+        self.assertEqual({roll.method for roll in geometries.values()}, {"THROW", "ANCHOR", "RIFT"})
+        self.assertEqual(
+            {sum(roll.axes.values()) for roll in geometries.values()},
+            {sum(roll.axes.values()) for roll in [geometries["THROW"]]},
+        )
+        mastery = core.defense_mastery(0, "THROW", 100, 100)
+        self.assertEqual((mastery.mastery_mask, mastery.mastered), (1, False))
+        mastery = core.defense_mastery(mastery.mastery_mask, "ANCHOR", 100, 100)
+        self.assertEqual((mastery.mastery_mask, mastery.mastered), (3, False))
+        mastery = core.defense_mastery(mastery.mastery_mask, "RIFT", 100, 100)
+        self.assertEqual((mastery.mastery_mask, mastery.balance), (7, 100))
+        self.assertTrue(mastery.finale_allowed)
+        unbalanced = core.defense_mastery(7, "RIFT", 70, 100)
+        self.assertEqual(unbalanced.balance, 55)
+        self.assertFalse(unbalanced.finale_allowed)
         locked = core.first_strike(2, 0, 0, False)
         self.assertFalse(locked.allowed)
         strike = core.first_strike(2, 5, 3, False)
@@ -297,6 +316,10 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(held["journey"]["curseRemaining"], 12)
         self.assertEqual(held["calculation"]["scene"], "spell")
         self.assertEqual(held["calculation"]["verdict"], "HOLD")
+        self.assertIsNotNone(held["spell"]["repair"])
+        self.assertGreaterEqual(held["spell"]["repair"]["replacements"], 1)
+        self.assertTrue(any(step["label"] == "SEARCH" and step["expression"].startswith("Lean: 4⁴") for step in held["calculation"]["steps"]))
+        self.assertTrue(any(step["label"] == "CONSEQUENCE" for step in held["calculation"]["steps"]))
 
     def test_spell_complexity_synergy_and_meta_progression_are_core_owned(self) -> None:
         core = client()
@@ -318,6 +341,16 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(cast.synergy, "REVELATION")
         self.assertEqual(cast.synergy_title, "Эхо откровения")
         self.assertEqual(cast.outcome, "APPEND")
+        repair = core.spell_repair(
+            20260813, 1, 2, 9, 8, 0,
+            "MEMORY", "RELEASE", "ECHO", "VEIL",
+        )
+        self.assertEqual(repair.replacements, 2)
+        self.assertEqual(repair.target, {
+            "SOURCE": "SPARK", "INTENT": "REVEAL", "PATH": "ECHO", "FORM": "VEIL",
+        })
+        self.assertEqual((repair.target_synergy, repair.force, repair.coherence, repair.resonance), ("REVELATION", 6, 6, 4))
+        self.assertEqual((repair.outcome, repair.tension_cost), ("APPEND", 0))
 
     def test_shadow_exposes_only_the_last_three_pieces(self) -> None:
         session = GameSession(client(), 20260813)
@@ -380,7 +413,7 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertIn("defense_conserves_impact", defended["calculation"]["theorem"])
         self.assertEqual(defended["calculation"]["scene"], "conservation")
         self.assertEqual(
-            defended["calculation"]["signals"][-1]["value"],
+            next(signal["value"] for signal in defended["calculation"]["signals"] if signal["symbol"] == "d"),
             str(defended["defense"]["damage"]),
         )
         restarted = session.act({"action": "surrender"})
@@ -468,6 +501,76 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertIsNotNone(preview)
         self.assertGreaterEqual(preview["damage"], 1)
         self.assertIsNone(selected["defense"])
+
+    def test_chapter_two_defense_profiles_preserve_impulse_and_rift_commits_blind(self) -> None:
+        revealed: dict[str, dict[str, object]] = {}
+        for method in ("THROW", "ANCHOR"):
+            session = GameSession(client(), 20260813)
+            session.game._interruption_rank = 2
+            session.act({"action": "tick"})
+            interrupted = cast_valid_spell(session)
+            self.assertEqual(interrupted["status"], "awaiting_defense_roll")
+            state = session.act({"action": "choose_defense_method", "method": method})
+            self.assertEqual(state["defenseMethod"], method)
+            self.assertIsNotNone(state["defenseRoll"])
+            revealed[method] = state
+
+        self.assertEqual(
+            revealed["THROW"]["defenseRoll"]["impact"],
+            revealed["ANCHOR"]["defenseRoll"]["impact"],
+        )
+
+        rift = GameSession(client(), 20260813)
+        rift.game._interruption_rank = 2
+        rift.act({"action": "tick"})
+        cast_valid_spell(rift)
+        hidden = rift.act({"action": "choose_defense_method", "method": "RIFT"})
+        self.assertEqual(hidden["defenseMethod"], "RIFT")
+        self.assertIsNone(hidden["defenseRoll"])
+        self.assertEqual(hidden["calculation"]["result"], "WAIT / BLIND PLANE")
+        committed = rift.act({"action": "select_plane", "plane": "XY"})
+        self.assertTrue(committed["defensePlaneLocked"])
+        self.assertEqual(committed["selectedPlane"], "XY")
+        self.assertIsNotNone(committed["defenseRoll"])
+        with self.assertRaisesRegex(ValueError, "уже зафиксирована"):
+            rift.act({"action": "select_plane", "plane": "ZW"})
+        defended = rift.act({"action": "confirm_defense"})
+        self.assertGreaterEqual(defended["defense"]["damage"], 1)
+        self.assertTrue(defended["chapterTwo"]["seen"]["RIFT"])
+        self.assertEqual(defended["chapterTwo"]["masteryMask"], 4)
+        self.assertEqual(
+            defended["defense"]["absorbed"] + defended["defense"]["damage"],
+            defended["defenseRoll"]["impact"],
+        )
+
+    def test_chapter_two_mastery_persists_and_opens_zero_shield_finale(self) -> None:
+        session = GameSession(client(), 20260813)
+        expected_masks = {"THROW": 1, "ANCHOR": 3, "RIFT": 7}
+        for index, method in enumerate(("THROW", "ANCHOR", "RIFT")):
+            session.game._interruption_rank = 2
+            session.act({"action": "tick"})
+            cast_valid_spell(session)
+            selected = session.act({"action": "choose_defense_method", "method": method})
+            if method == "RIFT":
+                self.assertIsNone(selected["defenseRoll"])
+            selected = session.act({"action": "select_plane", "plane": "XY"})
+            self.assertIsNotNone(selected["defenseRoll"])
+
+            # Calibration fixture: isolate geometry mastery from accumulated
+            # damage so the finale gate can be tested at a held balance.
+            session.game.state.total_damage = 0
+            defended = session.act({"action": "confirm_defense"})
+            chapter = defended["chapterTwo"]
+            self.assertEqual(chapter["masteryMask"], expected_masks[method])
+            self.assertTrue(chapter["seen"][method])
+            if index < 2:
+                self.assertFalse(chapter["finaleAllowed"])
+                session.act({"action": "surrender"})
+
+        self.assertTrue(chapter["mastered"])
+        self.assertTrue(chapter["balanceHeld"])
+        self.assertTrue(chapter["finaleAllowed"])
+        self.assertEqual(chapter["status"], "KEEPER_OF_BALANCE")
 
     def test_forecast_protocol_reveals_the_next_world_form_only_when_strike_is_ready(self) -> None:
         session = GameSession(client(), 20260813)

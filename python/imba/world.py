@@ -14,6 +14,7 @@ from .core import (
     CombatAnswer,
     CoreClient,
     DefenseAnswer,
+    DefenseMasteryAnswer,
     DefenseRoll,
     FirstStrikeAnswer,
     JourneyAnswer,
@@ -21,6 +22,7 @@ from .core import (
     ProtocolUnlockAnswer,
     SpellCastAnswer,
     SpellLawAnswer,
+    SpellRepairAnswer,
     WorldCompensationAnswer,
     WorldVitalsAnswer,
 )
@@ -76,13 +78,18 @@ class WorldState:
     confirmed_ticks: int = 0
     spell_law: SpellLawAnswer | None = None
     last_spell: SpellCastAnswer | None = None
+    spell_repair: SpellRepairAnswer | None = None
     spell_attempts: int = 0
     journey: JourneyAnswer | None = None
     layers: list[Layer] = field(default_factory=list)
     interrupted_layer: Layer | None = None
+    defense_method: str | None = None
     defense_roll: DefenseRoll | None = None
     selected_plane: str | None = None
+    defense_plane_locked: bool = False
     defense: DefenseAnswer | None = None
+    defense_mastery_mask: int = 0
+    defense_mastery: DefenseMasteryAnswer | None = None
     total_damage: int = 0
     internal_tension: int = 0
     enemy_damage: int = 0
@@ -201,13 +208,16 @@ class WorldGame:
         self.state.status = "awaiting_tick"
         self.state.confirmed_ticks = 0
         self.state.spell_law = None
+        self.state.spell_repair = None
         self.state.spell_attempts = 0
         initial = Layer(rank=1, name=self.core.name(1), tick=0)
         self.state.layers = [initial]
         self._pure_creation(initial)
         self.state.interrupted_layer = None
+        self.state.defense_method = None
         self.state.defense_roll = None
         self.state.selected_plane = None
+        self.state.defense_plane_locked = False
         self.state.defense = None
         self.state.plane_preview = None
         self.state.first_strike_used = False
@@ -266,6 +276,18 @@ class WorldGame:
         self.state.last_spell = spell
         self.state.spell_attempts += 1
         if not spell.admitted:
+            self.state.spell_repair = self.core.spell_repair(
+                self.state.seed,
+                self.state.cycle,
+                next_tick,
+                current.rank,
+                self.state.certificate,
+                self.state.progression.mastery_marks,
+                source,
+                intent,
+                path,
+                form,
+            )
             failed = ", ".join(
                 label for label, passed in (
                     ("сила", spell.force_ok),
@@ -274,9 +296,13 @@ class WorldGame:
                 ) if not passed
             )
             self.state.messages.append(
-                f"Заклинание удержано: не совпали {failed}. Состояние, ранг и дорога не изменились."
+                f"Заклинание удержано: не совпали {failed}. Lean нашёл честную пересборку "
+                f"из {self.state.spell_repair.replacements} замен; цена напряжения "
+                f"{self.state.spell_repair.tension_cost}. Состояние, ранг и дорога не изменились."
             )
             return
+
+        self.state.spell_repair = None
 
         next_rank, next_name = self.core.promote(current.rank, 1)
         candidate = Layer(rank=next_rank, name=next_name, tick=next_tick)
@@ -417,6 +443,7 @@ class WorldGame:
             True,
         )
         self._refresh_forecast()
+        self._refresh_defense_mastery()
         self.state.messages.append(
             f"Мир ответил балансом: ёмкость {capacity}/12, "
             f"Ворон восстановил {balance.player_healing}, Мир восстановил {compensation.healing}. "
@@ -454,25 +481,92 @@ class WorldGame:
         )
 
     def roll_defense(self) -> None:
-        if self.state.status != "awaiting_defense_roll" or self.state.interrupted_layer is None:
-            raise ValueError("защитный бросок доступен только после перебития")
-        self.state.defense_roll = self.core.defense_roll(
-            self.state.seed,
-            self.state.cycle,
-            self.state.interrupted_layer.rank,
+        self.choose_defense_method("THROW")
+
+    def _refresh_defense_mastery(self, method: str | None = None) -> None:
+        selected = method or (
+            self.state.defense_mastery.method
+            if self.state.defense_mastery is not None
+            else None
         )
+        if selected is None:
+            return
+        raven_life = max(0, 100 - self.state.total_damage)
+        mastery = self.core.defense_mastery(
+            self.state.defense_mastery_mask,
+            selected,
+            raven_life,
+            self.state.world_vitals.life,
+        )
+        self.state.defense_mastery_mask = mastery.mastery_mask
+        self.state.defense_mastery = mastery
+
+    def choose_defense_method(self, method: str) -> None:
+        if self.state.status != "awaiting_defense_roll" or self.state.interrupted_layer is None:
+            raise ValueError("профиль защиты доступен только после перебития")
+        selected = method.upper()
+        if selected not in {"THROW", "ANCHOR", "RIFT"}:
+            raise ValueError("неизвестный профиль защиты")
+        self.state.defense_method = selected
+        self.state.selected_plane = None
+        self.state.defense_plane_locked = False
         self.state.plane_preview = None
         self.state.status = "awaiting_plane"
-        self.state.messages.append(
-            "Многоосевой куб брошен. Выберите подпространственную плоскость."
-        )
+        if selected == "RIFT":
+            self.state.defense_roll = None
+            self.state.messages.append(
+                "Разлом открыт. Выберите плоскость вслепую; координаты раскроются после обязательства."
+            )
+        else:
+            self.state.defense_roll = self.core.defense_roll(
+                self.state.seed,
+                self.state.cycle,
+                self.state.interrupted_layer.rank,
+                selected,
+            )
+            title = "Многоосевой куб брошен" if selected == "THROW" else "Якорь выровнял пары осей"
+            self.state.messages.append(
+                f"{title}. Выберите подпространственную плоскость."
+            )
 
     def select_plane(self, plane: str) -> None:
-        if self.state.status != "awaiting_plane" or self.state.defense_roll is None:
-            raise ValueError("сначала бросьте многоосевой куб")
+        if (
+            self.state.status != "awaiting_plane"
+            or self.state.interrupted_layer is None
+            or self.state.defense_method is None
+        ):
+            raise ValueError("сначала выберите профиль защиты")
         selected = plane.upper()
-        if selected not in self.state.defense_roll.planes:
+        if selected not in {"XY", "XZ", "XW", "YZ", "YW", "ZW"}:
             raise ValueError("неизвестная подпространственная плоскость")
+        if self.state.defense_plane_locked:
+            raise ValueError("плоскость Разлома уже зафиксирована")
+        if self.state.defense_method == "RIFT" and self.state.defense_roll is None:
+            self.state.selected_plane = selected
+            self.state.defense_plane_locked = True
+            self.state.defense_roll = self.core.defense_roll(
+                self.state.seed,
+                self.state.cycle,
+                self.state.interrupted_layer.rank,
+                "RIFT",
+            )
+            self.state.plane_preview = (
+                self.core.defense_resolve(
+                    self.state.seed,
+                    self.state.cycle,
+                    self.state.interrupted_layer.rank,
+                    selected,
+                    "RIFT",
+                )
+                if self._has_protocol("REFRACTION")
+                else None
+            )
+            self.state.messages.append(
+                f"Разлом зафиксировал плоскость {selected}; координаты раскрыты, смена плоскости невозможна."
+            )
+            return
+        if self.state.defense_roll is None:
+            raise ValueError("геометрия защиты ещё не раскрыта")
         self.state.selected_plane = selected
         self.state.plane_preview = (
             self.core.defense_resolve(
@@ -480,6 +574,7 @@ class WorldGame:
                 self.state.cycle,
                 self.state.interrupted_layer.rank,
                 selected,
+                self.state.defense_method,
             )
             if self._has_protocol("REFRACTION") and self.state.interrupted_layer is not None
             else None
@@ -500,6 +595,7 @@ class WorldGame:
             self.state.cycle,
             self.state.interrupted_layer.rank,
             self.state.selected_plane,
+            self.state.defense_method or "THROW",
         )
         attack = self.state.pending_attack
         if attack is None or attack.actor != "NATURE" or attack.kind != "ATTACK":
@@ -509,6 +605,7 @@ class WorldGame:
             raise ValueError("защитная реакция не привязана к импульсу Природы")
         self.state.defense = answer
         self.state.total_damage += answer.damage
+        self._refresh_defense_mastery(self.state.defense_method or "THROW")
         self.state.status = "defended"
         self.state.messages.append(
             f"Реакция Σ{reaction.result_epoch} привязана к контакту h{reaction.parent_head}: "

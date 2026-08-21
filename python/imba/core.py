@@ -40,6 +40,7 @@ class FuseAnswer:
 
 @dataclass(frozen=True)
 class DefenseRoll:
+    method: str
     seed: int
     cycle: int
     interrupted_rank: int
@@ -59,6 +60,21 @@ class DefenseAnswer:
     damage: int
     fully_blocked: bool
     reason: str
+
+
+@dataclass(frozen=True)
+class DefenseMasteryAnswer:
+    previous_mask: int
+    method: str
+    mastery_mask: int
+    seen: dict[str, bool]
+    mastered: bool
+    raven_life: int
+    world_life: int
+    balance: int
+    balance_held: bool
+    finale_allowed: bool
+    status: str
 
 
 @dataclass(frozen=True)
@@ -269,6 +285,24 @@ class SpellCastAnswer:
 
 
 @dataclass(frozen=True)
+class SpellRepairAnswer:
+    current: dict[str, str]
+    target: dict[str, str]
+    target_phrases: dict[str, str]
+    changed: dict[str, bool]
+    replacements: int
+    target_synergy: str
+    target_synergy_title: str
+    force: int
+    coherence: int
+    resonance: int
+    outcome: str
+    tension_cost: int
+    consequence: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class JourneyAnswer:
     identity: int
     certificate: int
@@ -413,6 +447,7 @@ class CoreClient:
         seed: int,
         cycle: int,
         interrupted_rank: int,
+        method: str,
     ) -> DefenseRoll:
         for key, expected in (
             ("seed", seed),
@@ -423,26 +458,45 @@ class CoreClient:
                 raise CoreProtocolError(f"core echoed a different {key}")
         axes = {key.upper(): self._field(payload, key, int) for key in ("x", "y", "z", "w")}
         planes = {key.upper(): self._field(payload, key, int) for key in ("xy", "xz", "xw", "yz", "yw", "zw")}
-        if not all(1 <= value <= 6 for value in axes.values()):
-            raise CoreProtocolError("defense axis is not a d6 face")
+        echoed_method = self._field(payload, "method", str)
+        if echoed_method != method.upper() or echoed_method not in {"THROW", "ANCHOR", "RIFT"}:
+            raise CoreProtocolError("core echoed a different defense method")
+        axis_ceiling = 11 if echoed_method == "RIFT" else 6
+        if not all(1 <= value <= axis_ceiling for value in axes.values()):
+            raise CoreProtocolError("defense axis is outside the certified geometry")
+        impact = self._field(payload, "impact", int)
+        if impact != interrupted_rank + sum(axes.values()):
+            raise CoreProtocolError("defense geometry changed the certified impact")
         return DefenseRoll(
+            method=echoed_method,
             seed=seed,
             cycle=cycle,
             interrupted_rank=interrupted_rank,
-            impact=self._field(payload, "impact", int),
+            impact=impact,
             axes=axes,
             planes=planes,
         )
 
-    def defense_roll(self, seed: int, cycle: int, interrupted_rank: int) -> DefenseRoll:
-        payload = self._call("defense-roll", seed, cycle, interrupted_rank)
-        return self._parse_defense_roll(payload, seed, cycle, interrupted_rank)
+    def defense_roll(
+        self, seed: int, cycle: int, interrupted_rank: int, method: str = "THROW"
+    ) -> DefenseRoll:
+        selected = method.upper()
+        payload = self._call("defense-roll", seed, cycle, interrupted_rank, selected)
+        return self._parse_defense_roll(
+            payload, seed, cycle, interrupted_rank, selected
+        )
 
     def defense_resolve(
-        self, seed: int, cycle: int, interrupted_rank: int, plane: str
+        self, seed: int, cycle: int, interrupted_rank: int, plane: str,
+        method: str = "THROW",
     ) -> DefenseAnswer:
-        payload = self._call("defense-resolve", seed, cycle, interrupted_rank, plane)
-        roll = self._parse_defense_roll(payload, seed, cycle, interrupted_rank)
+        selected = method.upper()
+        payload = self._call(
+            "defense-resolve", seed, cycle, interrupted_rank, plane, selected
+        )
+        roll = self._parse_defense_roll(
+            payload, seed, cycle, interrupted_rank, selected
+        )
         echoed_plane = self._field(payload, "plane", str)
         if echoed_plane != plane.upper() or echoed_plane not in roll.planes:
             raise CoreProtocolError("core echoed a different defense plane")
@@ -467,6 +521,51 @@ class CoreClient:
             raise CoreProtocolError("defense projection violated impact conservation")
         if answer.damage < 1 or answer.fully_blocked:
             raise CoreProtocolError("core violated the no-full-block defense theorem")
+        return answer
+
+    def defense_mastery(
+        self, mask: int, method: str, raven_life: int, world_life: int
+    ) -> DefenseMasteryAnswer:
+        selected = method.upper()
+        payload = self._call(
+            "defense-mastery", mask, selected, raven_life, world_life
+        )
+        answer = DefenseMasteryAnswer(
+            previous_mask=self._field(payload, "previousMask", int),
+            method=self._field(payload, "method", str),
+            mastery_mask=self._field(payload, "masteryMask", int),
+            seen={
+                "THROW": self._field(payload, "throwSeen", bool),
+                "ANCHOR": self._field(payload, "anchorSeen", bool),
+                "RIFT": self._field(payload, "riftSeen", bool),
+            },
+            mastered=self._field(payload, "mastered", bool),
+            raven_life=self._field(payload, "ravenLife", int),
+            world_life=self._field(payload, "worldLife", int),
+            balance=self._field(payload, "balance", int),
+            balance_held=self._field(payload, "balanceHeld", bool),
+            finale_allowed=self._field(payload, "finaleAllowed", bool),
+            status=self._field(payload, "status", str),
+        )
+        if answer.previous_mask != mask % 8 or answer.method != selected:
+            raise CoreProtocolError("core echoed a different defense mastery input")
+        if not 0 <= answer.mastery_mask <= 7:
+            raise CoreProtocolError("defense mastery mask is outside three bits")
+        if answer.mastered != all(answer.seen.values()):
+            raise CoreProtocolError("defense mastery disagrees with observed geometries")
+        expected_finale = (
+            answer.mastered
+            and answer.raven_life > 0
+            and answer.world_life > 0
+            and answer.balance_held
+        )
+        if (
+            answer.raven_life != raven_life
+            or answer.world_life != world_life
+            or answer.balance_held != (answer.balance >= 65)
+            or answer.finale_allowed != expected_finale
+        ):
+            raise CoreProtocolError("chapter-II finale certificate is inconsistent")
         return answer
 
     def first_strike(
@@ -1058,6 +1157,72 @@ class CoreClient:
             raise CoreProtocolError("admitted spell lost its interface invariant")
         if answer.cost != (1 if answer.outcome == "APPEND_WITH_COST" else 0):
             raise CoreProtocolError("spell cost disagrees with its outcome")
+        return answer
+
+    def spell_repair(
+        self,
+        identity: int,
+        cycle: int,
+        pending_tick: int,
+        rank: int,
+        certificate: int,
+        mastery_marks: int,
+        source: str,
+        intent: str,
+        path: str,
+        form: str,
+    ) -> SpellRepairAnswer:
+        current = {
+            "SOURCE": source.upper(), "INTENT": intent.upper(),
+            "PATH": path.upper(), "FORM": form.upper(),
+        }
+        payload = self._call(
+            "spell-repair", identity, cycle, pending_tick, rank, certificate,
+            mastery_marks, current["SOURCE"], current["INTENT"],
+            current["PATH"], current["FORM"],
+        )
+        target = {
+            slot: self._field(payload, f"target{slot.title()}", str)
+            for slot in ("SOURCE", "INTENT", "PATH", "FORM")
+        }
+        changed = {
+            slot: self._field(payload, f"change{slot.title()}", bool)
+            for slot in ("SOURCE", "INTENT", "PATH", "FORM")
+        }
+        answer = SpellRepairAnswer(
+            current={
+                slot: self._field(payload, f"current{slot.title()}", str)
+                for slot in ("SOURCE", "INTENT", "PATH", "FORM")
+            },
+            target=target,
+            target_phrases={
+                slot: self._field(payload, f"target{slot.title()}Phrase", str)
+                for slot in ("SOURCE", "INTENT", "PATH", "FORM")
+            },
+            changed=changed,
+            replacements=self._field(payload, "replacements", int),
+            target_synergy=self._field(payload, "targetSynergy", str),
+            target_synergy_title=self._field(payload, "targetSynergyTitle", str),
+            force=self._field(payload, "targetForce", int),
+            coherence=self._field(payload, "targetCoherence", int),
+            resonance=self._field(payload, "targetResonance", int),
+            outcome=self._field(payload, "targetOutcome", str),
+            tension_cost=self._field(payload, "tensionCost", int),
+            consequence=self._field(payload, "consequence", str),
+            reason=self._field(payload, "reason", str),
+        )
+        if answer.current != current:
+            raise CoreProtocolError("spell repair echoed a different current formula")
+        if answer.replacements != sum(answer.changed.values()):
+            raise CoreProtocolError("spell repair replacement count disagrees with its route")
+        if any(answer.changed[slot] != (current[slot] != target[slot]) for slot in current):
+            raise CoreProtocolError("spell repair change mask disagrees with its target")
+        if answer.outcome not in {"APPEND", "APPEND_WITH_COST"}:
+            raise CoreProtocolError("spell repair target is not admitted")
+        if answer.tension_cost != (1 if answer.outcome == "APPEND_WITH_COST" else 0):
+            raise CoreProtocolError("spell repair hid its tension consequence")
+        if answer.replacements < 1 or min(answer.force, answer.coherence, answer.resonance) < 0:
+            raise CoreProtocolError("spell repair returned an invalid route")
         return answer
 
     def journey(self, identity: int, certificate: int) -> JourneyAnswer:

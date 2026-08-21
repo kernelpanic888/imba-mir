@@ -35,6 +35,16 @@ function setsCookie(headers: Headers, name: string): boolean {
 
 async function incrementMetrics(db: D1Database | undefined, keys: string[]): Promise<void> {
   if (!db || keys.length === 0) return;
+  // Deployments normally apply the checked-in Drizzle migration first. This
+  // idempotent guard also makes the very first request safe in local previews
+  // and while a cold deployment is still staging its migration.
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS author_metrics (
+      key TEXT PRIMARY KEY NOT NULL,
+      value INTEGER DEFAULT 0 NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `).run();
   const timestamp = Date.now();
   const statements = keys.map((key) => db.prepare(`
     INSERT INTO author_metrics (key, value, updated_at)

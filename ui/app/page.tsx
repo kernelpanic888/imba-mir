@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import packageMetadata from "../package.json";
 import { emitSoundCue, SOUND_CUES } from "./sound";
 import { LocalizedTree, LOCALE_MEMORY_KEY, translateText, type Locale } from "./i18n";
 import { ARCHIVE_GROUPS, AUTHOR_LINKS, AUTHOR_NAME } from "./sources";
@@ -54,6 +55,7 @@ type ApiResponse = {
 // The Worker keeps the browser on one origin and forwards /api/* to Lean.
 const API_BASE = "";
 const EMPTY_SIZE = 7;
+const GAME_VERSION = `v${packageMetadata.version}`;
 
 type WorldLayer = { rank: number; name: string; tick: number };
 type WorldSurrender = {
@@ -71,6 +73,7 @@ type WorldSurrender = {
   reflectionAfter: number;
 };
 type DefenseRollView = {
+  method: "THROW" | "ANCHOR" | "RIFT";
   impact: number;
   axes: Record<"X" | "Y" | "Z" | "W", number>;
   planes: Array<{ id: string; power: number }>;
@@ -83,6 +86,15 @@ type DefenseView = {
   absorbed: number;
   damage: number;
   fullyBlocked: boolean;
+};
+type ChapterTwoView = {
+  masteryMask: number;
+  seen: Record<"THROW" | "ANCHOR" | "RIFT", boolean>;
+  mastered: boolean;
+  balance: number;
+  balanceHeld: boolean;
+  finaleAllowed: boolean;
+  status: "LEARNING_GEOMETRIES" | "KEEPER_OF_BALANCE";
 };
 type FirstStrikeView = {
   allowed: boolean;
@@ -264,6 +276,22 @@ type SpellResultView = {
   cost: number;
   reason: string;
 };
+type SpellRepairView = {
+  current: Record<SpellSlot, string>;
+  target: Record<SpellSlot, string>;
+  targetPhrases: Record<SpellSlot, string>;
+  changed: Record<SpellSlot, boolean>;
+  replacements: number;
+  targetSynergy: "NONE" | SpellSynergyView["id"];
+  targetSynergyTitle: string;
+  force: number;
+  coherence: number;
+  resonance: number;
+  outcome: "APPEND" | "APPEND_WITH_COST";
+  tensionCost: number;
+  consequence: string;
+  reason: string;
+};
 type SpellView = {
   law: {
     forceNeed: number;
@@ -280,6 +308,7 @@ type SpellView = {
   };
   attempts: number;
   last: SpellResultView | null;
+  repair: SpellRepairView | null;
 };
 type SpellFormulaEvaluation = {
   terms: SpellTermView[];
@@ -287,6 +316,30 @@ type SpellFormulaEvaluation = {
   score: { force: number; coherence: number; resonance: number };
   deficit: number;
   penalty: number;
+};
+type RealityTraceKind = "PLAYER" | "FORMULA" | "SYSTEM" | "WORLD" | "BALANCE";
+type RealityTraceTrend = "UP" | "DOWN" | "STEADY";
+type RealityTraceEvent = {
+  id: number;
+  kind: RealityTraceKind;
+  trend: RealityTraceTrend;
+  glyph: string;
+  label: string;
+  detail: string;
+  delta?: number;
+};
+type RealitySnapshot = {
+  seed: number;
+  cycle: number;
+  status: WorldState["status"];
+  confirmedTicks: number;
+  playerLife: number;
+  worldLife: number;
+  worldShield: number;
+  worldLoad: number;
+  balance: number;
+  tension: number;
+  eventKey: string;
 };
 type JourneyView = {
   roadBricks: number;
@@ -312,9 +365,12 @@ type WorldState = {
   layers: WorldLayer[];
   shadow: ShadowView;
   interruptedLayer: WorldLayer | null;
+  defenseMethod: "THROW" | "ANCHOR" | "RIFT" | null;
+  defensePlaneLocked: boolean;
   defenseRoll: DefenseRollView | null;
   selectedPlane: string | null;
   defense: DefenseView | null;
+  chapterTwo: ChapterTwoView;
   totalDamage: number;
   internalTension: number;
   enemyDamage: number;
@@ -334,13 +390,15 @@ type WorldState = {
   messages: string[];
 };
 type WorldResponse = { ok: boolean; state?: WorldState; error?: string };
-type WorldAction = "tick" | "cast_spell" | "roll_defense" | "select_plane" | "confirm_defense" | "first_strike" | "world_reaction" | "surrender" | "choose_protocol";
+type WorldAction = "tick" | "cast_spell" | "roll_defense" | "choose_defense_method" | "select_plane" | "confirm_defense" | "first_strike" | "world_reaction" | "surrender" | "choose_protocol";
 type CalculationAction = WorldAction | "reset";
+const DEFENSE_PLANE_IDS = ["XY", "XZ", "XW", "YZ", "YW", "ZW"] as const;
 
 const pendingScene: Record<CalculationAction, CalculationSceneView> = {
   tick: "tick",
   cast_spell: "spell",
   roll_defense: "axes",
+  choose_defense_method: "axes",
   select_plane: "projection",
   confirm_defense: "conservation",
   surrender: "memory",
@@ -348,6 +406,20 @@ const pendingScene: Record<CalculationAction, CalculationSceneView> = {
   world_reaction: "reaction",
   choose_protocol: "progress",
   reset: "reset",
+};
+
+const REALITY_ACTION_GLYPHS: Record<CalculationAction, string> = {
+  tick: "+1",
+  cast_spell: "λ",
+  roll_defense: "✣",
+  choose_defense_method: "◈",
+  select_plane: "⊿",
+  confirm_defense: "∥",
+  first_strike: "⚖",
+  world_reaction: "⇄",
+  surrender: "Σ",
+  choose_protocol: "⌁",
+  reset: "↺",
 };
 
 const SPELL_SLOT_META: Record<SpellSlot, { glyph: string; label: string }> = {
@@ -482,6 +554,7 @@ export default function WorldHome() {
   const [spellResolution, setSpellResolution] = useState<SpellPerformanceView | null>(null);
   const [formulaSnapshot, setFormulaSnapshot] = useState<FormulaIndividualModel | null>(null);
   const [dismissedChapterFinale, setDismissedChapterFinale] = useState<string | null>(null);
+  const [chapterFinaleBeat, setChapterFinaleBeat] = useState(0);
   const [selectedChapterId, setSelectedChapterId] = useState(DEFAULT_CHAPTER_ID);
   const [storyPlayback, setStoryPlayback] = useState<StoryPlayback | null>(null);
   const [tutorialMarks, setTutorialMarks] = useState<TutorialObservation[]>([]);
@@ -490,6 +563,30 @@ export default function WorldHome() {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [metaphysicsOpen, setMetaphysicsOpen] = useState(false);
   const [runPanelOpen, setRunPanelOpen] = useState(false);
+  const [realityTrace, setRealityTrace] = useState<RealityTraceEvent[]>([]);
+  const realityTraceId = useRef(0);
+  const previousRealitySnapshot = useRef<RealitySnapshot | null>(null);
+  const pushRealityTrace = useCallback((event: Omit<RealityTraceEvent, "id">) => {
+    const nextEvent = { ...event, id: ++realityTraceId.current };
+    setRealityTrace((current) => [...current, nextEvent].slice(-8));
+  }, []);
+  const captureRealityClick = useCallback((event: ReactMouseEvent<HTMLElement>) => {
+    const origin = event.target instanceof Element ? event.target : null;
+    const control = origin?.closest("button, a, input, select, [role='button'], [role='option']") ?? origin;
+    const accessible = control?.getAttribute("aria-label") || control?.getAttribute("title");
+    const visible = control instanceof HTMLElement ? control.innerText : "";
+    const fallback = control?.closest(".world-square")
+      ? (locale === "en" ? "Contact with the magic field" : "Касание поля магии")
+      : locale === "en" ? "Contact with the interface" : "Касание интерфейса";
+    const detail = (accessible || visible || fallback).replace(/\s+/g, " ").trim().slice(0, 88);
+    pushRealityTrace({
+      kind: "PLAYER",
+      trend: "STEADY",
+      glyph: "◎",
+      label: locale === "en" ? "OBSERVE / PLAYER INPUT" : "OBSERVE / ВВОД ИГРОКА",
+      detail,
+    });
+  }, [locale, pushRealityTrace]);
   const selectedChapter = useMemo(() => getStoryChapter(selectedChapterId), [selectedChapterId]);
   const playbackChapter = useMemo(
     () => storyPlayback ? getStoryChapter(storyPlayback.chapterId) : null,
@@ -516,9 +613,7 @@ export default function WorldHome() {
     }).map((candidate) => candidate.id);
     setCompletedChapterIds(completed);
     const rememberedId = window.localStorage.getItem(ACTIVE_CHAPTER_MEMORY_KEY) ?? DEFAULT_CHAPTER_ID;
-    const rememberedChapter = getStoryChapter(rememberedId);
-    const rememberedUnlocked = STORY_CHAPTERS.filter((candidate) => candidate.order < rememberedChapter.order).every((candidate) => completed.includes(candidate.id));
-    const chapter = rememberedUnlocked ? rememberedChapter : getStoryChapter(DEFAULT_CHAPTER_ID);
+    const chapter = getStoryChapter(rememberedId);
     setSelectedChapterId(chapter.id);
     if (window.localStorage.getItem(storySceneMemoryKey(chapter.id, chapter.openingSceneId)) !== "complete") {
       setStoryPlayback({ chapterId: chapter.id, sceneId: chapter.openingSceneId, beat: 0 });
@@ -610,6 +705,15 @@ export default function WorldHome() {
       setSeed(String(payload.state.seed));
       if (payload.state.calculation) setCalculation(payload.state.calculation);
       const resolvedCalculation = payload.state.calculation;
+      if (resolvedCalculation && resolvedCalculation.verdict !== "RUNNING") {
+        pushRealityTrace({
+          kind: "SYSTEM",
+          trend: resolvedCalculation.verdict === "HOLD" ? "DOWN" : "UP",
+          glyph: resolvedCalculation.verdict === "HOLD" ? "⊘" : "✓",
+          label: `LEAN / ${resolvedCalculation.verdict}`,
+          detail: `${resolvedCalculation.theorem} · ${resolvedCalculation.result}`.slice(0, 120),
+        });
+      }
       if (resolvedCalculation?.scene === "spell" && resolvedCalculation.verdict !== "RUNNING") {
         const resolvedSpell = payload.state.spell?.last;
         setSpellResolution({
@@ -624,7 +728,7 @@ export default function WorldHome() {
       }
     }
     if (!payload.ok) throw new Error(payload.error || "Мир отклонил действие");
-  }, []);
+  }, [pushRealityTrace]);
 
   const loadWorld = useCallback(async () => {
     try {
@@ -635,8 +739,15 @@ export default function WorldHome() {
     } catch {
       setConnected(false);
       setError("Lean-ядро просыпается. Соединение восстановится автоматически…");
+      pushRealityTrace({
+        kind: "SYSTEM",
+        trend: "DOWN",
+        glyph: "…",
+        label: locale === "en" ? "LEAN / CONNECTION WAIT" : "LEAN / ОЖИДАНИЕ СВЯЗИ",
+        detail: locale === "en" ? "No state transition has been admitted" : "Переход состояния не был допущен",
+      });
     }
-  }, [acceptWorld]);
+  }, [acceptWorld, locale, pushRealityTrace]);
 
   useEffect(() => {
     void loadWorld();
@@ -647,6 +758,13 @@ export default function WorldHome() {
 
   const actWorld = useCallback(async (action: WorldAction, extra: Record<string, unknown> = {}) => {
     if (busy || !connected) return;
+    pushRealityTrace({
+      kind: "SYSTEM",
+      trend: "STEADY",
+      glyph: REALITY_ACTION_GLYPHS[action],
+      label: locale === "en" ? "LEAN / TRANSITION REQUEST" : "LEAN / ЗАПРОС ПЕРЕХОДА",
+      detail: `σ —${action}→ σ′ · OBSERVE → ADMIT → CERTIFY`,
+    });
     setCalculation(pendingCalculation(action, world));
     setBusy(true);
     setError(null);
@@ -660,6 +778,13 @@ export default function WorldHome() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Шаг не выполнен");
       setCalculation(null);
+      pushRealityTrace({
+        kind: "SYSTEM",
+        trend: "DOWN",
+        glyph: "⊘",
+        label: "LEAN / HOLD",
+        detail: cause instanceof Error ? cause.message : locale === "en" ? "Transition rejected" : "Переход отклонён",
+      });
       if (action === "cast_spell") {
         setSpellPerformance(null);
         setSpellResolution(null);
@@ -667,7 +792,7 @@ export default function WorldHome() {
     } finally {
       setBusy(false);
     }
-  }, [acceptWorld, busy, connected, world]);
+  }, [acceptWorld, busy, connected, locale, pushRealityTrace, world]);
 
   useEffect(() => {
     if (!calculation || calculation.verdict === "RUNNING") return;
@@ -711,6 +836,22 @@ export default function WorldHome() {
   }, [pendingSpellTick]);
 
   const bindSpellTerm = useCallback((slot: SpellSlot, termId: string) => {
+    const releasing = spellChoices[slot] === termId;
+    const certifiedRoute = world?.spell?.repair;
+    const followsLeanRoute = Boolean(
+      certifiedRoute && certifiedRoute.changed[slot] && certifiedRoute.target[slot] === termId,
+    );
+    pushRealityTrace({
+      kind: "FORMULA",
+      trend: releasing ? "DOWN" : followsLeanRoute ? "UP" : "STEADY",
+      glyph: SPELL_TERM_GLYPHS[termId] ?? "◇",
+      label: followsLeanRoute
+        ? (locale === "en" ? "LEAN ROUTE / RUNE CONSEQUENCE" : "МАРШРУТ LEAN / ПОСЛЕДСТВИЕ РУНЫ")
+        : locale === "en" ? `FORM / ${releasing ? "RELEASE" : "BIND"}` : `ФОРМА / ${releasing ? "ОТПУСТИТЬ" : "СВЯЗАТЬ"}`,
+      detail: followsLeanRoute && certifiedRoute
+        ? `${slot}: ${certifiedRoute.current[slot]} → ${termId} · target F${certifiedRoute.force}/C${certifiedRoute.coherence}/R${certifiedRoute.resonance} · τ+${certifiedRoute.tensionCost}`
+        : `${slot} ${releasing ? "∅" : "←"} ${termId}`,
+    });
     setSpellPreview(null);
     setSpellChoices((currentChoices) => ({
       ...currentChoices,
@@ -718,7 +859,7 @@ export default function WorldHome() {
     }));
     setSpellProjected(false);
     setSpellBindPulse((pulse) => pulse + 1);
-  }, []);
+  }, [locale, pushRealityTrace, spellChoices, world?.spell?.repair]);
 
   const resetWorld = useCallback(async () => {
     const value = Number(seed);
@@ -728,6 +869,13 @@ export default function WorldHome() {
     }
     setBusy(true);
     setError(null);
+    pushRealityTrace({
+      kind: "SYSTEM",
+      trend: "STEADY",
+      glyph: REALITY_ACTION_GLYPHS.reset,
+      label: locale === "en" ? "LEAN / NEW WORLD REQUEST" : "LEAN / ЗАПРОС НОВОГО МИРА",
+      detail: `identity ← ${value} · σ₀`,
+    });
     setCalculation(pendingCalculation("reset", world));
     try {
       const response = await fetch(`${API_BASE}/api/reset`, {
@@ -741,11 +889,18 @@ export default function WorldHome() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Новый Мир не создан");
       setCalculation(null);
+      pushRealityTrace({
+        kind: "SYSTEM",
+        trend: "DOWN",
+        glyph: "⊘",
+        label: "LEAN / HOLD",
+        detail: cause instanceof Error ? cause.message : locale === "en" ? "World genesis rejected" : "Рождение Мира отклонено",
+      });
       return false;
     } finally {
       setBusy(false);
     }
-  }, [acceptWorld, seed, world]);
+  }, [acceptWorld, locale, pushRealityTrace, seed, world]);
 
   const status = world?.status ?? "awaiting_tick";
   const current = world?.layers.at(-1) ?? { rank: 1, name: "imba", tick: 0 };
@@ -773,30 +928,15 @@ export default function WorldHome() {
   const nextSpellSlot = spellAssemblyIndex >= 0 ? spellSlots[spellAssemblyIndex] : null;
   const activeSynergy = spellEvaluation?.synergy ?? null;
   const committedSynergy = committedSpellEvaluation?.synergy ?? null;
-  const spellReady = committedSpellComplete && (!spellLaw?.synergyRequired || Boolean(committedSynergy));
   const synergyMultiplier = spellLaw?.metaTier ? 2 : 1;
   const spellScore = spellEvaluation?.score ?? { force: 0, coherence: 0, resonance: 0 };
   const spellDeficit = spellEvaluation?.deficit ?? 0;
-  let spellRepair: null | {
-    slot: SpellSlot;
-    from: SpellTermView;
-    to: SpellTermView;
-    evaluation: SpellFormulaEvaluation;
-  } = null;
-  if (spellLaw && spellComplete && spellEvaluation) {
-    for (const slot of spellSlots) {
-      const from = selectedSpellTerms.find((term) => term.slot === slot);
-      if (!from) continue;
-      for (const to of spellLaw.terms.filter((term) => term.slot === slot && term.id !== from.id)) {
-        const choices = { ...displayedSpellChoices, [slot]: to.id };
-        const evaluation = evaluateSpellFormula(spellLaw, choices, spellSlots);
-        if (evaluation.penalty >= spellEvaluation.penalty) continue;
-        if (!spellRepair || evaluation.penalty < spellRepair.evaluation.penalty) {
-          spellRepair = { slot, from, to, evaluation };
-        }
-      }
-    }
-  }
+  const leanRepair = world?.spell?.last?.outcome === "HOLD" ? world.spell.repair : null;
+  const leanRepairSlots = leanRepair
+    ? spellSlots.filter((slot) => leanRepair.changed[slot])
+    : [];
+  const nextLeanRepairSlot = leanRepairSlots.find((slot) => spellChoices[slot] !== leanRepair?.target[slot]) ?? null;
+  const leanRepairApplied = Boolean(leanRepair && leanRepairSlots.length > 0 && nextLeanRepairSlot === null);
   const spellQuality = !spellComplete
     ? { state: "building", label: `СБОРКА ${selectedSpellTerms.length}/${spellSlots.length}`, detail: nextSpellSlot ? `СЛЕДУЮЩАЯ РУНА: ${SPELL_SLOT_META[nextSpellSlot].label}` : "СОЕДИНИТЕ РУНЫ" }
     : spellLaw?.synergyRequired && !activeSynergy
@@ -814,23 +954,29 @@ export default function WorldHome() {
   ].filter((channel): channel is string => Boolean(channel)) : [];
   const spellGuide = !spellComplete || !spellLaw
     ? null
+    : leanRepair && nextLeanRepairSlot
+      ? {
+          state: "repair",
+          title: `LEAN: ПЕРЕСБОРКА ${leanRepairSlots.length - leanRepairSlots.filter((slot) => spellChoices[slot] !== leanRepair.target[slot]).length + 1}/${leanRepair.replacements}`,
+          detail: `${SPELL_SLOT_META[nextLeanRepairSlot].label}: «${leanRepair.targetPhrases[nextLeanRepairSlot]}» · итог F${leanRepair.force} C${leanRepair.coherence} R${leanRepair.resonance} · ${leanRepair.outcome} · напряжение +${leanRepair.tensionCost}.`,
+        }
+      : leanRepairApplied && leanRepair
+        ? {
+            state: "stable",
+            title: `МАРШРУТ LEAN СОБРАН · ${leanRepair.targetSynergyTitle}`,
+            detail: `Минимум ${leanRepair.replacements} замен выполнен. Последствие: ${leanRepair.outcome}, напряжение +${leanRepair.tensionCost}. Подтвердите формулу повторно.`,
+          }
     : spellDeficit === 0 && (!spellLaw.synergyRequired || activeSynergy)
       ? {
           state: "stable",
           title: "КАНАЛЫ СВЯЗАНЫ",
           detail: `F${spellScore.force} · C${spellScore.coherence} · R${spellScore.resonance}. Проекция устойчива; вердикт даст Lean.`,
         }
-      : spellRepair
-        ? {
-            state: "repair",
-            title: `ОСЛАБЛЕНО: ${weakSpellChannels.join(" · ") || "СИНЕРГИЯ"}`,
-            detail: `Одна замена: «${spellRepair.from.phrase}» → «${spellRepair.to.phrase}». Каналы станут F${spellRepair.evaluation.score.force} · C${spellRepair.evaluation.score.coherence} · R${spellRepair.evaluation.score.resonance}.`,
-          }
-        : {
-            state: "warning",
-            title: spellLaw.synergyRequired && !activeSynergy ? "КОНТУР НЕ ОБРАЗУЕТ СИНЕРГИЮ" : `ОСЛАБЛЕНО: ${weakSpellChannels.join(" · ")}`,
-            detail: "Одной заменой формулу не удержать. Разберите один узел и соберите другой контур; Проводник не выбирает заклинание вместо вас.",
-          };
+      : {
+          state: "warning",
+          title: spellLaw.synergyRequired && !activeSynergy ? "КОНТУР НЕ ОБРАЗУЕТ СИНЕРГИЮ" : `ОСЛАБЛЕНО: ${weakSpellChannels.join(" · ")}`,
+          detail: "Это только визуальная проекция. Отправьте формулу в Lean: ядро удержит состояние или вернёт минимальный маршрут пересборки с объявленной ценой.",
+        };
   const selectedTermFor = (slot: SpellSlot) => selectedSpellTerms.find((term) => term.slot === slot);
   const lastSpell = world?.spell?.last ?? null;
   const magicEmerging = calculation?.scene === "spell" && (calculation.verdict === "APPEND" || calculation.verdict === "APPEND_WITH_COST");
@@ -845,6 +991,8 @@ export default function WorldHome() {
   const journey = world?.journey;
   const roadPercent = journey?.castleDistance ? Math.min(100, journey.roadBricks / journey.castleDistance * 100) : 0;
   const tutorial = selectedChapter.tutorial ?? null;
+  const advancedDefense = selectedChapter.order >= 2;
+  const visibleDefensePlanes = world?.defenseRoll?.planes ?? DEFENSE_PLANE_IDS.map((id) => ({ id, power: null }));
   const tutorialMilestones = tutorial?.milestones ?? [];
   const tutorialComplete = Boolean(tutorial && tutorialMilestones.every((milestone) => tutorialMarks.includes(milestone.id)));
   useEffect(() => {
@@ -856,14 +1004,18 @@ export default function WorldHome() {
   const tutorialProgress = `${tutorialMarks.length}/${tutorialMilestones.length}`;
   const chapterFinaleReady = selectedChapter.finale.trigger === "TUTORIAL_MASTERY"
     ? tutorialComplete
-    : Boolean(journey?.chapterConflict);
+    : selectedChapter.finale.trigger === "DEFENSE_MASTERY_BALANCE"
+      ? Boolean(world?.chapterTwo.finaleAllowed)
+      : Boolean(journey?.chapterConflict);
   const chapterFinaleKey = `${selectedChapter.id}:${selectedChapter.finale.trigger}`;
-  const isChapterUnlocked = (chapterId: string) => {
-    const chapter = getStoryChapter(chapterId);
-    return STORY_CHAPTERS.filter((candidate) => candidate.order < chapter.order).every((candidate) => completedChapterIds.includes(candidate.id));
-  };
+  const finaleBeats = selectedChapter.finale.beats ?? [];
+  const currentFinaleBeat = finaleBeats[chapterFinaleBeat] ?? null;
+  const finaleAtLastBeat = finaleBeats.length === 0 || chapterFinaleBeat >= finaleBeats.length - 1;
+  useEffect(() => setChapterFinaleBeat(0), [chapterFinaleKey]);
   const menuProgress = tutorial
     ? `${tutorialProgress} МЕХАНИК`
+    : advancedDefense
+      ? `${Object.values(world?.chapterTwo.seen ?? {}).filter(Boolean).length}/3 ГЕОМЕТРИИ · БАЛАНС ${world?.chapterTwo.balance ?? 100}`
     : `ШАГИ ПО ДОРОГЕ ${journey?.roadBricks ?? 0} · РУБЕЖ ${journey?.castleDistance ?? 12}`;
   const action: WorldAction = worldDefeated
     ? "tick"
@@ -887,14 +1039,14 @@ export default function WorldHome() {
     : status === "awaiting_tick"
     ? `НАКОПИТЬ ТИК ${nextTick}`
     : status === "awaiting_spell"
-      ? spellReady ? `СДЕЛАТЬ ШАГ ПО ДОРОГЕ ${world?.pendingTick ?? nextTick}` : spellLaw?.synergyRequired && committedSpellComplete && !committedSynergy ? "СОЗДАЙТЕ СИНЕРГИЮ" : "СОБЕРИТЕ ФОРМУЛУ"
+      ? spellComplete ? "ПРОВЕРИТЬ ФОРМУЛУ В LEAN" : "СОБЕРИТЕ ФОРМУЛУ"
       : status === "awaiting_defense_roll"
-        ? "БРОСИТЬ МНОГООСЕВОЙ КУБ"
+        ? advancedDefense ? "ВЫБЕРИТЕ ГЕОМЕТРИЮ НА ПОЛЕ" : "БРОСИТЬ МНОГООСЕВОЙ КУБ"
         : status === "awaiting_plane"
           ? world?.selectedPlane ? `ПОДТВЕРДИТЬ ПЛОСКОСТЬ ${world.selectedPlane}` : "ВЫБЕРИТЕ ПЛОСКОСТЬ"
           : "СДАТЬ СТОПКУ МИРУ";
   const actionSymbol = action === "tick" ? "+1" : action === "cast_spell" || action === "confirm_defense" || action === "world_reaction" ? "✓" : action === "roll_defense" ? "◇" : "↺";
-  const actionDisabled = progressChoicePending || worldDefeated || busy || !connected || (status === "awaiting_plane" && !world?.selectedPlane) || (status === "awaiting_spell" && !spellReady);
+  const actionDisabled = progressChoicePending || worldDefeated || busy || !connected || (advancedDefense && status === "awaiting_defense_roll") || (status === "awaiting_plane" && !world?.selectedPlane) || (status === "awaiting_spell" && !spellComplete);
   const decisionKicker = progressChoicePending
     ? "РУБЕЖ ХРОНИКИ ДОСТИГНУТ"
     : worldDefeated
@@ -903,7 +1055,7 @@ export default function WorldHome() {
     ? "КОНТАКТ ДОПИСАН · РЕАКЦИЯ ОБЯЗАТЕЛЬНА"
     : status === "awaiting_tick" ? `СЛЕДУЮЩИЙ: ТИК ${nextTick}`
     : status === "awaiting_spell" ? "ТИК НАКОПЛЕН · КНИГА ОТКРЫТА"
-    : status === "awaiting_defense_roll" ? "ПЕРЕБИТИЕ ПРИРОДЫ"
+    : status === "awaiting_defense_roll" ? advancedDefense ? "ПЕРЕБИТИЕ · ВЫБЕРИТЕ ОТНОШЕНИЕ К РИСКУ" : "ПЕРЕБИТИЕ ПРИРОДЫ"
     : status === "awaiting_plane" ? world?.selectedPlane ? `ВЫБРАНА ${world.selectedPlane}` : "ВЫБЕРИТЕ 2 ИЗ 4 ОСЕЙ"
     : "ЗАЩИТА ЗАВЕРШЕНА";
   const decisionTitle = progressChoicePending
@@ -914,7 +1066,7 @@ export default function WorldHome() {
     ? "Дайте Миру ответить."
     : status === "awaiting_tick" ? "Сделайте один тик."
     : status === "awaiting_spell" ? "Снимите фрагмент заклятия сами."
-    : status === "awaiting_defense_roll" ? "Бросьте куб в четырёх осях."
+    : status === "awaiting_defense_roll" ? advancedDefense ? "Выберите способ встретить один импульс." : "Бросьте куб в четырёх осях."
     : status === "awaiting_plane" ? "Спроецируйте бросок в плоскость."
     : "Примите остаточное пробитие.";
   const decisionCopy = progressChoicePending
@@ -925,7 +1077,7 @@ export default function WorldHome() {
     ? "Контакт уже имеет сертификат и точного родителя, но изменение ещё не применено. Только соседняя реакция Мира завершит пару и зафиксирует результат."
     : status === "awaiting_tick" ? "Ничего не проявляется само: один ввод создаёт ровно один ожидающий тик."
     : status === "awaiting_spell" ? "Выберите источник, намерение и путь. Lean проверит морфизм; только допустимая формула станет Imba + 1 и шагом по зелёной дороге."
-    : status === "awaiting_defense_roll" ? "Перебитая фишка уже ушла обратно в Тень. Lean-ядро выдаст координаты защиты X, Y, Z, W."
+    : status === "awaiting_defense_roll" ? advancedDefense ? "Бросок раскрывает состояние, Якорь выравнивает его, Разлом требует выбрать плоскость вслепую. Суммарный импульс не меняется." : "Перебитая фишка уже ушла обратно в Тень. Lean-ядро выдаст координаты защиты X, Y, Z, W."
     : status === "awaiting_plane" ? "Выбранная плоскость поглощает свои две оси. Дополнительная плоскость остаётся открытой и формирует урон и память."
     : `Плоскость ${world?.defense?.plane} поглотила ${world?.defense?.absorbed}; открытая ${world?.defense?.complementPlane} оставила пробитие ${world?.defense?.damage}. После сдачи вся линия уйдёт в Тень.`;
   const playerActor = world?.actors.player ?? { life: 100, maxLife: 100, damageTaken: 0, condition: "READY" };
@@ -940,6 +1092,112 @@ export default function WorldHome() {
   const balanceIndex = Math.round(Math.max(0, Math.min(playerLifePercent, worldLifePercent) - Math.abs(playerLifePercent - worldLifePercent) * 0.5));
   const balanceState = worldDefeated || balanceIndex === 0 ? "BROKEN" : balanceIndex < 35 ? "CRITICAL" : balanceIndex < 65 ? "UNSTABLE" : "HELD";
   const balanceLabel = balanceState === "BROKEN" ? "РАЗРУШЕНО" : balanceState === "CRITICAL" ? "КРИТИЧНО" : balanceState === "UNSTABLE" ? "НЕУСТОЙЧИВО" : "УДЕРЖАНО";
+  const latestRealityEvent = realityTrace.at(-1) ?? null;
+  const visibleRealityTrace = realityTrace.slice(-4);
+  useEffect(() => {
+    if (!world) return;
+    const nextSnapshot: RealitySnapshot = {
+      seed: world.seed,
+      cycle: world.cycle,
+      status: world.status,
+      confirmedTicks: world.confirmedTicks,
+      playerLife: playerActor.life,
+      worldLife: worldActor.life,
+      worldShield: worldActor.shield,
+      worldLoad: worldActor.load,
+      balance: balanceIndex,
+      tension: world.internalTension,
+      eventKey: `${world.worldEvents.length}:${worldEvent?.form ?? "NONE"}:${worldEvent?.after.life ?? worldActor.life}`,
+    };
+    const previous = previousRealitySnapshot.current;
+    previousRealitySnapshot.current = nextSnapshot;
+    if (!previous || previous.seed !== nextSnapshot.seed || previous.cycle !== nextSnapshot.cycle) {
+      pushRealityTrace({
+        kind: "SYSTEM",
+        trend: "UP",
+        glyph: "ι",
+        label: locale === "en" ? "LEAN / STATE ADMITTED" : "LEAN / СОСТОЯНИЕ ДОПУЩЕНО",
+        detail: `σ${nextSnapshot.cycle} · HP R${nextSnapshot.playerLife} / W${nextSnapshot.worldLife} · ⚖${nextSnapshot.balance}`,
+      });
+      return;
+    }
+    if (previous.status !== nextSnapshot.status) {
+      pushRealityTrace({
+        kind: "SYSTEM",
+        trend: "STEADY",
+        glyph: "→",
+        label: locale === "en" ? "SYSTEM / PHASE" : "СИСТЕМА / ФАЗА",
+        detail: `${previous.status} → ${nextSnapshot.status}`,
+      });
+    }
+    if (previous.confirmedTicks !== nextSnapshot.confirmedTicks) {
+      pushRealityTrace({
+        kind: "SYSTEM",
+        trend: "UP",
+        glyph: "+1",
+        label: locale === "en" ? "LEAN / TICK CERTIFIED" : "LEAN / ТИК СЕРТИФИЦИРОВАН",
+        detail: `n ${previous.confirmedTicks} → ${nextSnapshot.confirmedTicks}`,
+      });
+    }
+    if (previous.playerLife !== nextSnapshot.playerLife) {
+      pushRealityTrace({
+        kind: "PLAYER",
+        trend: nextSnapshot.playerLife > previous.playerLife ? "UP" : "DOWN",
+        glyph: nextSnapshot.playerLife > previous.playerLife ? "✚" : "Δ",
+        label: locale === "en" ? "RAVEN / LIFE" : "ВОРОН / ЖИЗНЬ",
+        detail: `HP ${previous.playerLife} → ${nextSnapshot.playerLife}`,
+        delta: nextSnapshot.playerLife - previous.playerLife,
+      });
+    }
+    if (previous.worldLife !== nextSnapshot.worldLife || previous.worldShield !== nextSnapshot.worldShield || previous.worldLoad !== nextSnapshot.worldLoad) {
+      const worldDelta = nextSnapshot.worldLife !== previous.worldLife
+        ? nextSnapshot.worldLife - previous.worldLife
+        : nextSnapshot.worldShield !== previous.worldShield
+          ? nextSnapshot.worldShield - previous.worldShield
+          : previous.worldLoad - nextSnapshot.worldLoad;
+      pushRealityTrace({
+        kind: "WORLD",
+        trend: worldDelta > 0 ? "UP" : worldDelta < 0 ? "DOWN" : "STEADY",
+        glyph: WORLD_REACTION_GLYPHS[worldEvent?.form ?? "HOMEOSTASIS"],
+        label: locale === "en" ? "WORLD / LIVING RESPONSE" : "МИР / ЖИВОЙ ОТВЕТ",
+        detail: `HP ${previous.worldLife}→${nextSnapshot.worldLife} · W ${previous.worldShield}→${nextSnapshot.worldShield} · L ${previous.worldLoad}→${nextSnapshot.worldLoad}`,
+        delta: worldDelta,
+      });
+    }
+    if (previous.balance !== nextSnapshot.balance) {
+      pushRealityTrace({
+        kind: "BALANCE",
+        trend: nextSnapshot.balance > previous.balance ? "UP" : "DOWN",
+        glyph: "⚖",
+        label: locale === "en" ? "BALANCE / LIFE CRITERION" : "БАЛАНС / КРИТЕРИЙ ЖИЗНИ",
+        detail: `${previous.balance} → ${nextSnapshot.balance} · R${nextSnapshot.playerLife} / W${nextSnapshot.worldLife}`,
+        delta: nextSnapshot.balance - previous.balance,
+      });
+    }
+    if (previous.tension !== nextSnapshot.tension) {
+      pushRealityTrace({
+        kind: "FORMULA",
+        trend: nextSnapshot.tension > previous.tension ? "DOWN" : "UP",
+        glyph: "⌁",
+        label: locale === "en" ? "FORM / INNER TENSION" : "ФОРМА / ВНУТРЕННЕЕ НАПРЯЖЕНИЕ",
+        detail: `τ ${previous.tension} → ${nextSnapshot.tension}`,
+        delta: nextSnapshot.tension - previous.tension,
+      });
+    }
+    if (previous.eventKey !== nextSnapshot.eventKey && worldEvent) {
+      pushRealityTrace({
+        kind: "WORLD",
+        trend: worldEvent.healing + worldEvent.playerHealing > worldEvent.directDamage + worldEvent.backlash ? "UP" : "STEADY",
+        glyph: WORLD_REACTION_GLYPHS[worldEvent.form],
+        label: locale === "en" ? `WORLD / ${worldEvent.form}` : `МИР / ${worldEvent.form}`,
+        detail: `κ${worldEvent.power} · heal ${worldEvent.healing + worldEvent.playerHealing} · direct ${worldEvent.directDamage} · load ${worldEvent.backlash}`,
+      });
+    }
+  }, [balanceIndex, locale, playerActor.life, pushRealityTrace, world, worldActor.life, worldActor.load, worldActor.shield, worldEvent]);
+  const latestDeltaEvent = realityTrace.slice().reverse().find((event) => typeof event.delta === "number" && event.delta !== 0) ?? null;
+  const latestPlayerLifeEvent = realityTrace.slice().reverse().find((event) => event.kind === "PLAYER" && typeof event.delta === "number") ?? null;
+  const latestWorldLifeEvent = realityTrace.slice().reverse().find((event) => event.kind === "WORLD" && typeof event.delta === "number") ?? null;
+  const latestBalanceEvent = realityTrace.slice().reverse().find((event) => event.kind === "BALANCE" && typeof event.delta === "number") ?? null;
   const calculationBattlePhase = calculation?.scene === "tick" ? "TICK"
     : calculation?.scene === "spell" ? "SPELL_AUDIT"
     : calculation?.scene === "manifest" ? "MANIFEST"
@@ -1163,12 +1421,11 @@ export default function WorldHome() {
   }, [triggerFieldReaction]);
 
   const selectChapter = useCallback((chapterId: string) => {
-    if (!isChapterUnlocked(chapterId)) return;
     const chapter = getStoryChapter(chapterId);
     setSelectedChapterId(chapter.id);
     window.localStorage.setItem(ACTIVE_CHAPTER_MEMORY_KEY, chapter.id);
     emitSoundCue("MENU_SELECT");
-  }, [completedChapterIds]);
+  }, []);
 
   const advanceStory = useCallback(() => {
     setStoryPlayback((playback) => {
@@ -1222,7 +1479,7 @@ export default function WorldHome() {
 
   return (
     <LocalizedTree locale={locale}>
-    <main className={`world-shell state-${status}`} lang={locale} data-locale={locale}>
+    <main className={`world-shell state-${status}`} lang={locale} data-locale={locale} onClickCapture={captureRealityClick}>
       {menuOpen && (
         <section className="game-menu" role="dialog" aria-modal="true" aria-labelledby="game-menu-title">
           <div className="game-menu-atmosphere" aria-hidden="true">
@@ -1245,6 +1502,7 @@ export default function WorldHome() {
               <span className="menu-boundary-signal"><i />Sh(D) ⇄ R<sub>D</sub></span>
             </div>
           </div>
+          <span className="game-menu-version" aria-label={`Версия игры ${GAME_VERSION}`}>{GAME_VERSION}</span>
           <header>
             <span>IMBA / МИР</span>
             <div className="game-menu-head-tools">
@@ -1266,14 +1524,20 @@ export default function WorldHome() {
           <nav className="game-menu-actions" aria-label="Главное меню">
             <div className="game-menu-chapters" role="list" aria-label="Доступные главы">
               {STORY_CHAPTERS.map((chapter) => {
-                const unlocked = isChapterUnlocked(chapter.id);
+                const completed = completedChapterIds.includes(chapter.id);
                 const chapterWord = locale === "en" ? "CHAPTER" : "ГЛАВА";
-                return <button key={chapter.id} type="button" role="listitem" data-active={chapter.id === selectedChapter.id} data-locked={!unlocked} disabled={!unlocked} aria-label={unlocked ? `${chapterWord} ${chapter.numeral}: ${translateText(locale, chapter.title)}` : locale === "en" ? `Chapter ${chapter.numeral} is locked until the previous chapter is completed` : `Глава ${chapter.numeral} закрыта до прохождения предыдущей`} onClick={() => selectChapter(chapter.id)}>
-                  <span>{String(chapter.order).padStart(2, "0")} / {chapterWord} {chapter.numeral}</span><b>{unlocked ? chapter.publication.label : locale === "en" ? "LOCKED ◇" : "ЗАКРЫТА ◇"}</b><small>{unlocked ? chapter.title : locale === "en" ? "COMPLETE THE PREVIOUS CHAPTER" : "ПРОЙДИТЕ ПРЕДЫДУЩУЮ ГЛАВУ"}</small>
+                const accessLabel = completed
+                  ? locale === "en" ? "COMPLETED ✓" : "ПРОЙДЕНА ✓"
+                  : locale === "en" ? "FREE ENTRY ◇" : "СВОБОДНЫЙ ВХОД ◇";
+                const accessDescription = completed
+                  ? locale === "en" ? "Completed; replay is always available" : "Пройдена; повторный вход всегда доступен"
+                  : locale === "en" ? "Available without completing earlier chapters" : "Доступна без прохождения предыдущих глав";
+                return <button key={chapter.id} type="button" role="listitem" data-active={chapter.id === selectedChapter.id} data-complete={completed} aria-label={`${chapterWord} ${chapter.numeral}: ${translateText(locale, chapter.title)}. ${accessDescription}`} onClick={() => selectChapter(chapter.id)}>
+                  <span>{String(chapter.order).padStart(2, "0")} / {chapterWord} {chapter.numeral}</span><b>{accessLabel}</b><small>{translateText(locale, chapter.title)}</small>
                 </button>;
               })}
             </div>
-            <div className="author-frontier"><span>ОПУБЛИКОВАНО 0—1</span><b>ДАЛЬШЕ — ТОЛЬКО ПОСЛЕ АВТОРА</b></div>
+            <div className="author-frontier"><span>ОПУБЛИКОВАНО 0—II</span><b>ДАЛЬШЕ — ТОЛЬКО ПОСЛЕ АВТОРА</b></div>
             <a className="game-menu-hosting-note" href={AUTHOR_LINKS[3].href} target="_blank" rel="noreferrer" aria-label="Написать автору и поддержать развитие игры">
               <i>◌</i>
               <span><b>ПУБЛИЧНЫЙ ПРОТОТИП · БЕСПЛАТНЫЙ СЕРВЕР</b><small>ПОСЛЕ ПАУЗЫ LEAN-ЯДРУ МОЖЕТ ПОНАДОБИТЬСЯ ДО МИНУТЫ, ЧТОБЫ ПРОСНУТЬСЯ</small></span>
@@ -1483,10 +1747,26 @@ export default function WorldHome() {
                   <i className="infomagic-current infomagic-current--d"><b>F</b><b>⟐</b><b>C</b><b>≋</b><b>R</b><b>◌</b><b>Φ</b></i>
                   <span className="infomagic-vortex"><i /><i /><i /></span>
                 </div>
+                {latestDeltaEvent && <div className="reality-delta-flash" key={`delta-${latestDeltaEvent.id}`} data-kind={latestDeltaEvent.kind} data-trend={latestDeltaEvent.trend} aria-hidden="true">
+                  <i /><i /><b>{latestDeltaEvent.delta! > 0 ? "+" : ""}{latestDeltaEvent.delta}</b>
+                </div>}
+                {latestRealityEvent && <div
+                  className="reality-event-manifest"
+                  key={latestRealityEvent.id}
+                  data-kind={latestRealityEvent.kind}
+                  data-trend={latestRealityEvent.trend}
+                  aria-hidden="true"
+                >
+                  <i /><i /><strong>{latestRealityEvent.glyph}</strong>
+                  <span>{latestRealityEvent.label}</span>
+                  <small>{latestRealityEvent.detail}</small>
+                  {typeof latestRealityEvent.delta === "number" && latestRealityEvent.delta !== 0 && <em>{latestRealityEvent.delta > 0 ? "+" : ""}{latestRealityEvent.delta}</em>}
+                </div>}
                 <div className="header-combatant header-raven" data-state={battleRavenState}>
                   <img src="/hero-crow-v2.webp" alt="" decoding="async" />
                   <i><b style={{ width: `${playerLifePercent}%` }} /></i>
                   <span>ВОРОН · R{current.rank} · HP {playerActor.life}</span>
+                  {latestPlayerLifeEvent && <em className="reality-vital-delta" key={`raven-life-${latestPlayerLifeEvent.id}`} data-trend={latestPlayerLifeEvent.trend}>{latestPlayerLifeEvent.delta! > 0 ? "+" : ""}{latestPlayerLifeEvent.delta}</em>}
                 </div>
                 <div className="header-reality-lane">
                   <div className="header-formula-chain" key={`header-formula-${spellBindPulse}`} aria-label="Текущая формула заклинания">
@@ -1508,16 +1788,20 @@ export default function WorldHome() {
                 </div>
                 <div className="header-combatant header-world" data-state={battleWorldState} data-form={worldForm}>
                   <div><i /><i /><i /><strong>{reactionGlyph}</strong></div>
-                  <output className="reality-world-balance" data-state={balanceState} aria-label={`Главный критерий жизни: баланс ${balanceIndex} из 100; при нуле прохождение проиграно`}>
+                  <output className="reality-world-balance" key={`balance-${latestBalanceEvent?.id ?? 0}`} data-state={balanceState} data-change={latestBalanceEvent?.trend ?? "STEADY"} aria-label={`Главный критерий жизни: баланс ${balanceIndex} из 100; при нуле прохождение проиграно`}>
                     <small>КРИТЕРИЙ ЖИЗНИ</small><b>⚖ {balanceIndex}</b><span>{balanceLabel} · 0 = ПОРАЖЕНИЕ</span><i><em style={{ width: `${balanceIndex}%` }} /></i>
+                    {latestBalanceEvent && <mark>{latestBalanceEvent.delta! > 0 ? "+" : ""}{latestBalanceEvent.delta}</mark>}
                   </output>
                   <i><b style={{ width: `${worldLifePercent}%` }} /></i>
                   <span>МИР · W{worldActor.shield} · HP {worldActor.life}</span>
+                  {latestWorldLifeEvent && <em className="reality-vital-delta" key={`world-life-${latestWorldLifeEvent.id}`} data-trend={latestWorldLifeEvent.trend}>{latestWorldLifeEvent.delta! > 0 ? "+" : ""}{latestWorldLifeEvent.delta}</em>}
                 </div>
               </section>
-              <footer className="reality-stage-ledger">
+              <footer className="reality-stage-ledger" aria-live="polite" aria-label={locale === "en" ? "Lean-backed reality trace" : "События реальности, подтверждённые Lean"}>
                 <span>{realityFormulaIndividual.identity}</span>
-                <b>{realityFormulaIndividual.phrase}</b>
+                <ol className="reality-causality-track">
+                  {visibleRealityTrace.map((event) => <li key={event.id} data-kind={event.kind} data-trend={event.trend} title={event.detail}><i>{event.glyph}</i><b>{event.label}</b></li>)}
+                </ol>
                 <code>F{realityFormulaIndividual.score.force}/{realityFormulaIndividual.need.force} · C{realityFormulaIndividual.score.coherence}/{realityFormulaIndividual.need.coherence} · R{realityFormulaIndividual.score.resonance}/{realityFormulaIndividual.need.resonance}</code>
               </footer>
             </section>
@@ -1676,8 +1960,14 @@ export default function WorldHome() {
                     <span>{selectedChapter.finale.right.eyebrow}</span><b>{selectedChapter.finale.right.name}</b>
                   </div>
                 </div>
-                <div className="conflict-story"><small>{selectedChapter.finale.kicker}</small><h3 id="chapter-conflict-title">{selectedChapter.finale.title}</h3><p>{selectedChapter.finale.trigger === "TUTORIAL_MASTERY" ? selectedChapter.finale.bodyFallback : journey?.revelation || selectedChapter.finale.bodyFallback}</p><code>{selectedChapter.finale.theorem}</code></div>
+                <div className="conflict-story"><small>{selectedChapter.finale.kicker}</small><h3 id="chapter-conflict-title">{selectedChapter.finale.title}</h3>{currentFinaleBeat ? <div className="finale-dialogue" aria-live="polite"><span>{currentFinaleBeat.state} · {currentFinaleBeat.speaker}</span><p>{currentFinaleBeat.line}</p><span>{currentFinaleBeat.responseSpeaker}</span><p>{currentFinaleBeat.response}</p></div> : <p>{selectedChapter.finale.trigger === "TUTORIAL_MASTERY" ? selectedChapter.finale.bodyFallback : journey?.revelation || selectedChapter.finale.bodyFallback}</p>}<code>{selectedChapter.finale.theorem}</code></div>
                 <footer><span>{selectedChapter.finale.consequence}</span><button type="button" onClick={() => {
+                  if (!finaleAtLastBeat) {
+                    const nextBeat = finaleBeats[chapterFinaleBeat + 1];
+                    if (nextBeat) emitSoundCue(nextBeat.cue);
+                    setChapterFinaleBeat((beat) => beat + 1);
+                    return;
+                  }
                   window.localStorage.setItem(chapterCompletionMemoryKey(selectedChapter.id), "complete");
                   setCompletedChapterIds((completed) => completed.includes(selectedChapter.id) ? completed : [...completed, selectedChapter.id]);
                   setDismissedChapterFinale(chapterFinaleKey);
@@ -1685,7 +1975,7 @@ export default function WorldHome() {
                     setStoryPlayback(null);
                     setMenuOpen(true);
                   }
-                }}>{selectedChapter.finale.acceptLabel}</button></footer>
+                }}>{finaleAtLastBeat ? selectedChapter.finale.acceptLabel : "ДАЛЕЕ →"}</button></footer>
               </section>
             )}
             {status === "awaiting_spell" && spellLaw && !progressChoicePending && (
@@ -1798,11 +2088,32 @@ export default function WorldHome() {
                 {spellGuide && <section className="spell-guide" data-state={spellGuide.state} aria-live="polite">
                   <i aria-hidden="true">φ</i>
                   <div><span>ИЗУМРУДНЫЙ ПРОВОДНИК / ПРОЕКЦИЯ · НЕ ВЕРДИКТ</span><b>{spellGuide.title}</b><small>{spellGuide.detail}</small></div>
-                  {spellRepair && <button type="button" onClick={() => bindSpellTerm(spellRepair!.slot, spellRepair!.to.id)}><span>ПРИМЕНИТЬ 1 ЗАМЕНУ</span><b>{SPELL_TERM_GLYPHS[spellRepair.to.id] ?? "◇"}</b></button>}
+                  {leanRepair && nextLeanRepairSlot && <button type="button" onClick={() => bindSpellTerm(nextLeanRepairSlot, leanRepair.target[nextLeanRepairSlot])}><span>{locale === "en" ? "APPLY LEAN STEP" : "ПРИМЕНИТЬ ШАГ LEAN"} · {leanRepairSlots.indexOf(nextLeanRepairSlot) + 1}/{leanRepair.replacements}</span><b>{SPELL_TERM_GLYPHS[leanRepair.target[nextLeanRepairSlot]] ?? "◇"}</b></button>}
+                </section>}
+                {leanRepair && <section className="spell-repair-route" data-complete={leanRepairApplied} aria-label={locale === "en" ? "Minimal reconstruction route proved by Lean" : "Минимальный маршрут пересборки, доказанный Lean"}>
+                  <header>
+                    <div><span>Δφ / МИНИМАЛЬНАЯ ПЕРЕСБОРКА</span><b>{locale === "en" ? `REPLACEMENTS: ${leanRepair.replacements} · 4⁴ CHECKED` : `ЗАМЕН: ${leanRepair.replacements} · 4⁴ ПРОВЕРЕНО`}</b></div>
+                    <strong data-cost={leanRepair.tensionCost > 0}>τ +{leanRepair.tensionCost}</strong>
+                  </header>
+                  <div className="spell-repair-nodes">
+                    {spellSlots.map((slot, index) => {
+                      const changed = leanRepair.changed[slot];
+                      const applied = spellChoices[slot] === leanRepair.target[slot];
+                      const currentId = leanRepair.current[slot];
+                      const targetId = leanRepair.target[slot];
+                      return <div className="spell-repair-node" data-changed={changed} data-applied={applied} key={slot}>
+                        <small>{index + 1} / {SPELL_SLOT_META[slot].label}</small>
+                        <div><i>{SPELL_TERM_GLYPHS[currentId] ?? "◇"}</i><span>→</span><b>{SPELL_TERM_GLYPHS[targetId] ?? "◇"}</b></div>
+                        <code>{changed ? `${currentId} → ${targetId}` : `${targetId} =`}</code>
+                        <em>{changed ? applied ? "ПРИМЕНЕНО" : "ТРЕБУЕТСЯ" : "СОХРАНЕНО"}</em>
+                      </div>;
+                    })}
+                  </div>
+                  <footer><span>F{leanRepair.force} · C{leanRepair.coherence} · R{leanRepair.resonance}</span><b>{leanRepair.targetSynergyTitle}</b><small>{leanRepair.outcome} · {locale === "en" ? `DRAFT: WORLD HELD · CONFIRM: RANK +1 · CERTIFICATE +1 · TENSION +${leanRepair.tensionCost}` : `ЧЕРНОВИК: МИР УДЕРЖАН · ПОДТВЕРЖДЕНИЕ: РАНГ +1 · СЕРТИФИКАТ +1 · НАПРЯЖЕНИЕ +${leanRepair.tensionCost}`}</small></footer>
                 </section>}
                 {spellProjected && <div className="spell-projection"><span>A → B / Mor<sub>I</sub></span><code>{`Spell { source=${displayedSpellChoices.SOURCE ?? "?"}, intent=${displayedSpellChoices.INTENT ?? "?"}, path=${displayedSpellChoices.PATH ?? "?"}, form=${spellLaw.formRequired ? displayedSpellChoices.FORM ?? "?" : "DORMANT"}, synergy=${activeSynergy?.id ?? "NONE"} }`}</code><small>identity′ = identity · rank′ = rank + 1 · certificate′ = certificate + 1</small></div>}
-                {world?.spell?.last?.outcome === "HOLD" && <div className="spell-hold"><b>HOLD / ФОРМУЛА УДЕРЖАНА</b><span>{!world.spell.last.forceOk && "F "}{!world.spell.last.coherenceOk && "C "}{!world.spell.last.resonanceOk && "R "}{spellLaw.formRequired && world.spell.last.form === "DORMANT" && "⬡ "}{spellLaw.synergyRequired && world.spell.last.synergy === "NONE" && "⊗"}</span><small>Значки показывают несовпавший канал. Измените одну руну; дорога и заклятие не сдвинулись.</small></div>}
-                {spellComplete && <footer data-complete="true"><button type="button" onClick={() => setSpellProjected((value) => !value)}><span>{spellProjected ? "СКРЫТЬ МАТЕМАТИКУ" : "ПОКАЗАТЬ МАТЕМАТИКУ"}</span><b>λ</b></button><button type="button" disabled={!spellReady || busy} onClick={castConfiguredSpell}><span>{busy ? "LEAN СЧИТАЕТ…" : "ПРОВЕРИТЬ И СОТВОРИТЬ"}</span><b>→ ▰</b></button></footer>}
+                {world?.spell?.last?.outcome === "HOLD" && <div className="spell-hold"><b>HOLD / ФОРМУЛА УДЕРЖАНА</b><span>{!world.spell.last.forceOk && "F "}{!world.spell.last.coherenceOk && "C "}{!world.spell.last.resonanceOk && "R "}{spellLaw.formRequired && world.spell.last.form === "DORMANT" && "⬡ "}{spellLaw.synergyRequired && world.spell.last.synergy === "NONE" && "⊗"}</span><small>{leanRepair ? `Lean доказал минимальный выход: ${leanRepair.replacements} замен, ${leanRepair.targetSynergyTitle}, напряжение +${leanRepair.tensionCost}. Каждый шаг появится на Срезе реальности.` : "Состояние удержано без скрытого перехода."}</small></div>}
+                {spellComplete && <footer data-complete="true"><button type="button" onClick={() => setSpellProjected((value) => !value)}><span>{spellProjected ? "СКРЫТЬ МАТЕМАТИКУ" : "ПОКАЗАТЬ МАТЕМАТИКУ"}</span><b>λ</b></button><button type="button" disabled={busy} onClick={castConfiguredSpell}><span>{busy ? "LEAN СЧИТАЕТ…" : leanRepairApplied ? "ПОДТВЕРДИТЬ ПЕРЕСБОРКУ" : "ПРОВЕРИТЬ В LEAN"}</span><b>→ ▰</b></button></footer>}
               </section>
             )}
             {calculation && calculation.scene !== "spell" && (
@@ -1866,14 +2177,20 @@ export default function WorldHome() {
             </div>
           ) : (
             <div className="defense-space">
+              {advancedDefense && status === "awaiting_defense_roll" && <div className="defense-methods" aria-label="Геометрия защиты">
+                <button type="button" data-method="THROW" data-mastered={world?.chapterTwo.seen.THROW} disabled={busy} onClick={() => void actWorld("choose_defense_method", { method: "THROW" })}><i>✣</i><span><b>БРОСОК</b><small>сначала увидеть оси · {world?.chapterTwo.seen.THROW ? "ОСВОЕНО ✓" : "НЕ ИСПЫТАНО"}</small></span></button>
+                <button type="button" data-method="ANCHOR" data-mastered={world?.chapterTwo.seen.ANCHOR} disabled={busy} onClick={() => void actWorld("choose_defense_method", { method: "ANCHOR" })}><i>⌾</i><span><b>ЯКОРЬ</b><small>выровнять поток · {world?.chapterTwo.seen.ANCHOR ? "ОСВОЕНО ✓" : "НЕ ИСПЫТАНО"}</small></span></button>
+                <button type="button" data-method="RIFT" data-mastered={world?.chapterTwo.seen.RIFT} disabled={busy} onClick={() => void actWorld("choose_defense_method", { method: "RIFT" })}><i>⟐</i><span><b>РАЗЛОМ</b><small>плоскость вслепую · {world?.chapterTwo.seen.RIFT ? "ОСВОЕНО ✓" : "НЕ ИСПЫТАНО"}</small></span></button>
+              </div>}
+              {advancedDefense && <div className="defense-mastery"><span>ГЛАВА II · ГЕОМЕТРИИ {Object.values(world?.chapterTwo.seen ?? {}).filter(Boolean).length}/3</span><b data-held={world?.chapterTwo.balanceHeld}>БАЛАНС {world?.chapterTwo.balance ?? 100}</b></div>}
               <div className="axis-grid" aria-label="Результаты четырёх осей">
                 {(["X", "Y", "Z", "W"] as const).map((axis) => <div key={axis}><span>{axis}</span><b>{world?.defenseRoll?.axes[axis] ?? "—"}</b></div>)}
               </div>
               <div className="plane-grid" aria-label="Подпространственные плоскости">
-                {(world?.defenseRoll?.planes ?? []).map((plane) => <button key={plane.id} className={world?.selectedPlane === plane.id ? "selected" : ""} disabled={busy || status !== "awaiting_plane"} onClick={() => void actWorld("select_plane", { plane: plane.id })}><span>{plane.id}</span><b>{plane.power}</b></button>)}
+                {visibleDefensePlanes.map((plane) => <button key={plane.id} className={world?.selectedPlane === plane.id ? "selected" : ""} disabled={busy || status !== "awaiting_plane" || Boolean(world?.defensePlaneLocked)} onClick={() => void actWorld("select_plane", { plane: plane.id })}><span>{plane.id}</span><b>{plane.power ?? "?"}</b></button>)}
               </div>
               {world?.progression.planePreview && <p className="protocol-plane-preview"><span>ПРОТОКОЛ / ПРЕЛОМЛЕНИЕ</span><b>ПРОБИТИЕ {world.progression.planePreview.damage}</b><small>Открытая плоскость {world.progression.planePreview.complementPlane}; результат ещё не принят.</small></p>}
-              {!world?.defenseRoll && <p className="roll-placeholder">X · Y · Z · W<br />один бросок откроет шесть плоскостей</p>}
+              {!world?.defenseRoll && <p className="roll-placeholder">X · Y · Z · W<br />{world?.defenseMethod === "RIFT" ? "сначала зафиксируйте плоскость" : advancedDefense ? "выберите одну из трёх геометрий" : "один бросок откроет шесть плоскостей"}</p>}
               {world?.defense && <><div className="defense-result"><div><span>ИМПУЛЬС</span><b>{world.defenseRoll?.impact}</b></div><div><span>ПОГЛОЩЕНО / {world.defense.plane}</span><b>{world.defense.absorbed}</b></div><div className="damage"><span>ОТКРЫТО / {world.defense.complementPlane}</span><b>{world.defense.complementPower}</b></div></div><p className="defense-law">УРОН = r{world.interruptedLayer?.rank} + {world.defense.complementPlane} = {world.defense.damage}</p></>}
             </div>
           )}

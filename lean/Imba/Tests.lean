@@ -69,6 +69,19 @@ example (seed cycle rank : Nat) (plane : Plane) :
 example (rank : Nat) (roll : AxisRoll) (plane : Plane) :
     absorbedDamage rank roll plane + residualDamage rank roll plane =
       natureImpact rank roll := defense_conserves_impact rank roll plane
+example (method : DefenseMethod) (seed cycle rank : Nat) :
+    rollTotal (defenseRoll method seed cycle rank) =
+      rollTotal (rollDefense seed cycle rank) :=
+  defenseRoll_preserves_total method seed cycle rank
+example (method : DefenseMethod) (seed cycle rank : Nat) (plane : Plane) :
+    residualDamage rank (defenseRoll method seed cycle rank) plane ≠ 0 :=
+  full_block_impossible_for_method method seed cycle rank plane
+example : recordDefenseMethod (recordDefenseMethod (recordDefenseMethod 0 .throw) .anchor) .rift = 7 := by decide
+example : defenseMasteryComplete 7 = true := by decide
+example : lifeBalance 100 100 = 100 := by decide
+example : lifeBalance 70 100 = 55 := by decide
+example : chapterTwoFinaleAllowed 7 100 100 = true := by decide
+example : chapterTwoFinaleAllowed 3 100 100 = false := by decide
 
 example : sessionTension 0 0 = 1 := by decide
 example : carryTension 7 0 0 = 8 := by decide

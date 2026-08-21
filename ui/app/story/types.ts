@@ -31,7 +31,7 @@ export type StorySceneDefinition = {
 };
 
 export type ChapterFinaleDefinition = {
-  trigger: "JOURNEY_CHAPTER_CONFLICT" | "TUTORIAL_MASTERY";
+  trigger: "JOURNEY_CHAPTER_CONFLICT" | "TUTORIAL_MASTERY" | "DEFENSE_MASTERY_BALANCE";
   exit: "DISMISS" | "CHAPTER_MENU";
   header: string;
   protocol: string;
@@ -45,6 +45,7 @@ export type ChapterFinaleDefinition = {
   theorem: string;
   consequence: string;
   acceptLabel: string;
+  beats?: readonly StoryBeat[];
 };
 
 export type TutorialObservation =
@@ -82,7 +83,7 @@ export type StoryChapterDefinition = {
     formula: string;
   };
   runtime: {
-    id: "WORLD_JOURNEY_V1";
+    id: "WORLD_JOURNEY_V1" | "WORLD_JOURNEY_V2";
     start: "RESET_WORLD";
     progressLabel: string;
   };

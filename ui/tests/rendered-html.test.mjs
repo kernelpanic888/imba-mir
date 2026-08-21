@@ -38,6 +38,9 @@ function aggregateMetricDb(recordedKeys) {
             },
           };
         },
+        async run() {
+          assert.match(sql, /CREATE TABLE IF NOT EXISTS author_metrics/);
+        },
       };
     },
     async batch(statements) {
@@ -85,6 +88,9 @@ test("server-renders the Imba game shell", async () => {
   assert.match(html, /FORM → OBSERVABLE/);
   assert.match(html, /OBSERVABLE → WORLD/);
   assert.match(html, /Shadow/i);
+  assert.match(html, /aria-label="Game version v[\d.]+"/);
+  assert.doesNotMatch(html, /[А-Яа-яЁё]/u);
+  assert.match(html, /class="menu-primary" disabled/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|Building your site/i);
 });
 
@@ -95,6 +101,25 @@ test("initiative is presented as bounded balance capacity, never damage", async 
   assert.match(source, /УРОН 0/);
   assert.match(source, /lastBalanceCapacity/);
   assert.doesNotMatch(source, /firstStrike\?\.damage|lastStrikeDamage/);
+});
+
+test("the reality slice mirrors player input and Lean-backed state transitions", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /onClickCapture=\{captureRealityClick\}/);
+  assert.match(source, /OBSERVE \/ PLAYER INPUT/);
+  assert.match(source, /LEAN \/ TRANSITION REQUEST/);
+  assert.match(source, /"PLAYER" \| "FORMULA" \| "SYSTEM" \| "WORLD" \| "BALANCE"/);
+  assert.match(source, /previous\.balance !== nextSnapshot\.balance/);
+  assert.match(source, /className="reality-event-manifest"/);
+  assert.match(source, /className="reality-causality-track"/);
+  assert.match(source, /className="reality-delta-flash"/);
+  assert.match(source, /className="reality-vital-delta"/);
+  assert.match(source, /data-change=\{latestBalanceEvent\?\.trend/);
+  assert.match(styles, /\.reality-event-manifest/);
+  assert.match(styles, /@keyframes reality-event-wave/);
+  assert.match(styles, /@keyframes balance-panel-loss/);
+  assert.match(styles, /@keyframes balance-panel-gain/);
 });
 
 test("public API fails honestly when the Lean runtime is not configured", async () => {
@@ -163,7 +188,7 @@ test("records owner-only aggregate launches and players without exposing a count
 });
 
 test("starter preview is fully removed", async () => {
-  const [page, layout, styles, packageJson, sound, sources, formulaIndividual, i18n, storyTypes, storyRegistry, chapterZero, chapterOne, journeyLean] = await Promise.all([
+  const [page, layout, styles, packageJson, sound, sources, formulaIndividual, i18n, storyTypes, storyRegistry, chapterZero, chapterOne, chapterTwo, journeyLean] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
@@ -176,6 +201,7 @@ test("starter preview is fully removed", async () => {
     readFile(new URL("app/story/registry.ts", root), "utf8"),
     readFile(new URL("app/story/chapters/chapter-zero.ts", root), "utf8"),
     readFile(new URL("app/story/chapters/chapter-one.ts", root), "utf8"),
+    readFile(new URL("app/story/chapters/chapter-two.ts", root), "utf8"),
     readFile(new URL("../lean/Imba/Journey.lean", root), "utf8"),
   ]);
 
@@ -183,6 +209,11 @@ test("starter preview is fully removed", async () => {
   assert.match(page, /const API_BASE = ""/);
   assert.doesNotMatch(page, /127\.0\.0\.1:8765/);
   assert.match(page, /roll_defense/);
+  assert.match(page, /choose_defense_method/);
+  assert.match(page, /THROW/);
+  assert.match(page, /ANCHOR/);
+  assert.match(page, /RIFT/);
+  assert.match(page, /defensePlaneLocked/);
   assert.match(page, /confirm_defense/);
   assert.match(page, /Результаты четырёх осей/);
   assert.match(page, /first_strike/);
@@ -197,7 +228,12 @@ test("starter preview is fully removed", async () => {
   assert.match(page, /cast_spell/);
   assert.match(page, /spell-builder/);
   assert.match(page, /ИЗУМРУДНЫЙ ПРОВОДНИК \/ ПРОЕКЦИЯ · НЕ ВЕРДИКТ/);
-  assert.match(page, /ПРИМЕНИТЬ 1 ЗАМЕНУ/);
+  assert.match(page, /SpellRepairView/);
+  assert.match(page, /ПРИМЕНИТЬ ШАГ LEAN/);
+  assert.match(page, /Δφ \/ МИНИМАЛЬНАЯ ПЕРЕСБОРКА/);
+  assert.match(page, /4⁴ ПРОВЕРЕНО/);
+  assert.match(page, /ПОДТВЕРДИТЬ ПЕРЕСБОРКУ/);
+  assert.doesNotMatch(page, /ПРИМЕНИТЬ 1 ЗАМЕНУ/);
   assert.match(page, /evaluateSpellFormula/);
   assert.match(page, /displayedSpellChoices/);
   assert.match(page, /committedSpellEvaluation/);
@@ -209,7 +245,9 @@ test("starter preview is fully removed", async () => {
   assert.match(page, /data-preview=\{spellPreview\?\.slot/);
   assert.match(page, /aria-pressed=\{spellChoices\[slot\] === term\.id\}/);
   assert.match(page, /ПРЕДПРОСМОТР · КЛИК — ЗАКРЕПИТЬ/);
-  assert.match(page, /ПРОВЕРИТЬ И СОТВОРИТЬ/);
+  assert.match(page, /ПРОВЕРИТЬ В LEAN/);
+  assert.match(page, /game-menu-version/);
+  assert.match(page, /packageMetadata\.version/);
   assert.match(page, /ОДИН ВЫБОР — ОДНО ИЗМЕНЕНИЕ ЖИВОЙ ПЕЧАТИ/);
   assert.match(page, /ПЕЧАТЬ ГОТОВА К ПРОЕКЦИИ/);
   assert.match(page, /spell-loom/);
@@ -342,7 +380,7 @@ test("starter preview is fully removed", async () => {
   assert.match(page, /game-menu/);
   assert.match(page, /game-menu-chapters/);
   assert.match(page, /STORY_CHAPTERS\.map/);
-  assert.match(page, /ОПУБЛИКОВАНО 0—1/);
+  assert.match(page, /ОПУБЛИКОВАНО 0—II/);
   assert.match(page, /ДАЛЬШЕ — ТОЛЬКО ПОСЛЕ АВТОРА/);
   assert.match(page, /game-menu-hosting-note/);
   assert.match(page, /ПУБЛИЧНЫЙ ПРОТОТИП · БЕСПЛАТНЫЙ СЕРВЕР/);
@@ -420,8 +458,10 @@ test("starter preview is fully removed", async () => {
   assert.match(storyTypes, /StorySceneDefinition/);
   assert.match(storyTypes, /ChapterFinaleDefinition/);
   assert.match(storyTypes, /WORLD_JOURNEY_V1/);
+  assert.match(storyTypes, /WORLD_JOURNEY_V2/);
   assert.match(storyRegistry, /STORY_CHAPTERS/);
   assert.match(storyRegistry, /CHAPTER_ZERO/);
+  assert.match(storyRegistry, /CHAPTER_TWO/);
   assert.match(storyRegistry, /publication\.state !== "PUBLISHED"/);
   assert.match(storyRegistry, /assertStoryRegistry/);
   assert.match(storyRegistry, /Duplicate story chapter/);
@@ -430,6 +470,15 @@ test("starter preview is fully removed", async () => {
   assert.match(chapterOne, /chapter-01-curse-road/);
   assert.match(chapterOne, /RESET_WORLD/);
   assert.match(chapterOne, /JOURNEY_CHAPTER_CONFLICT/);
+  assert.match(chapterTwo, /chapter-02-three-geometries/);
+  assert.match(chapterTwo, /DEFENSE_MASTERY_BALANCE/);
+  assert.match(chapterTwo, /THROW ∧ ANCHOR ∧ RIFT ∧ balance ≥ 65/);
+  assert.match(chapterTwo, /НУЛЕВОЙ ЩИТ/);
+  assert.match(chapterTwo, /KEEPER OF BALANCE/);
+  assert.match(page, /chapterTwo\.finaleAllowed/);
+  assert.match(page, /chapterFinaleBeat/);
+  assert.match(i18n, /Three Geometries of Response/);
+  assert.match(i18n, /ZERO SHIELD/);
   assert.match(chapterZero, /chapter-00-initiation/);
   assert.match(chapterZero, /TUTORIAL_MASTERY/);
   assert.match(chapterZero, /MANUAL_TICK/);
@@ -525,6 +574,12 @@ test("starter preview is fully removed", async () => {
   assert.match(styles, /\.spell-bind-chain/);
   assert.match(styles, /\.spell-quality/);
   assert.match(styles, /\.spell-guide/);
+  assert.match(styles, /\.spell-repair-route/);
+  assert.match(styles, /\.spell-repair-node/);
+  assert.match(styles, /VERTICAL SPELL WORKSPACE/);
+  assert.match(styles, /\.state-awaiting_spell \.magic-stage-pane \.world-square/);
+  assert.match(styles, /aspect-ratio:\s*auto/);
+  assert.match(styles, /\.game-menu-version/);
   assert.match(styles, /\.tutorial-compass/);
   assert.match(styles, /\.author-frontier/);
   assert.match(styles, /\.game-menu-author-link/);
@@ -557,7 +612,13 @@ test("starter preview is fully removed", async () => {
   assert.match(styles, /\.reality-world-balance/);
   assert.match(styles, /\.spell-rows button\[data-preview="true"\]/);
   assert.match(page, /chapterCompletionMemoryKey/);
-  assert.match(page, /ПРОЙДИТЕ ПРЕДЫДУЩУЮ ГЛАВУ/);
+  assert.match(page, /СВОБОДНЫЙ ВХОД/);
+  assert.match(page, /FREE ENTRY/);
+  assert.match(page, /data-complete/);
+  assert.doesNotMatch(page, /ПРОЙДИТЕ ПРЕДЫДУЩУЮ ГЛАВУ/);
+  assert.doesNotMatch(page, /COMPLETE THE PREVIOUS CHAPTER/);
+  assert.doesNotMatch(page, /isChapterUnlocked/);
+  assert.doesNotMatch(page, /rememberedUnlocked/);
   assert.match(styles, /\.story-prologue/);
   assert.match(styles, /\.game-menu/);
   assert.match(styles, /\.game-menu-chapters/);

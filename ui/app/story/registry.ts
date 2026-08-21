@@ -1,10 +1,12 @@
 import { CHAPTER_ZERO } from "./chapters/chapter-zero";
 import { CHAPTER_ONE } from "./chapters/chapter-one";
+import { CHAPTER_TWO } from "./chapters/chapter-two";
 import type { StoryChapterDefinition, StorySceneDefinition } from "./types";
 
 export const STORY_CHAPTERS: readonly StoryChapterDefinition[] = [
   CHAPTER_ZERO,
   CHAPTER_ONE,
+  CHAPTER_TWO,
 ];
 
 export const DEFAULT_CHAPTER_ID = CHAPTER_ZERO.id;

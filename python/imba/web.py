@@ -133,7 +133,7 @@ def snapshot(game: WorldGame) -> dict[str, Any]:
     immediate = {
         "awaiting_tick": "Накопить один тик",
         "awaiting_spell": "Сконструировать заклинание шага по дороге",
-        "awaiting_defense_roll": "Бросить куб защиты",
+        "awaiting_defense_roll": "Выбрать геометрию защиты",
         "awaiting_plane": "Выбрать и подтвердить плоскость",
         "defended": "Сдать стопку Миру",
         "awaiting_world_reaction": "Кликнуть по Миру: принять реакцию",
@@ -165,7 +165,10 @@ def snapshot(game: WorldGame) -> dict[str, Any]:
         "interruptedLayer": _layer(state.interrupted_layer)
         if state.interrupted_layer is not None
         else None,
+        "defenseMethod": state.defense_method,
+        "defensePlaneLocked": state.defense_plane_locked,
         "defenseRoll": {
+            "method": state.defense_roll.method,
             "impact": state.defense_roll.impact,
             "axes": state.defense_roll.axes,
             "planes": [
@@ -183,6 +186,17 @@ def snapshot(game: WorldGame) -> dict[str, Any]:
             "damage": state.defense.damage,
             "fullyBlocked": state.defense.fully_blocked,
         } if state.defense is not None else None,
+        "chapterTwo": {
+            "masteryMask": state.defense_mastery_mask,
+            "seen": state.defense_mastery.seen if state.defense_mastery is not None else {
+                "THROW": False, "ANCHOR": False, "RIFT": False,
+            },
+            "mastered": state.defense_mastery.mastered if state.defense_mastery is not None else False,
+            "balance": state.defense_mastery.balance if state.defense_mastery is not None else 100,
+            "balanceHeld": state.defense_mastery.balance_held if state.defense_mastery is not None else True,
+            "finaleAllowed": state.defense_mastery.finale_allowed if state.defense_mastery is not None else False,
+            "status": state.defense_mastery.status if state.defense_mastery is not None else "LEARNING_GEOMETRIES",
+        },
         "totalDamage": state.total_damage,
         "internalTension": state.internal_tension,
         "enemyDamage": state.enemy_damage,
@@ -325,6 +339,22 @@ def snapshot(game: WorldGame) -> dict[str, Any]:
                 "cost": state.last_spell.cost,
                 "reason": state.last_spell.reason,
             } if state.last_spell is not None else None,
+            "repair": {
+                "current": state.spell_repair.current,
+                "target": state.spell_repair.target,
+                "targetPhrases": state.spell_repair.target_phrases,
+                "changed": state.spell_repair.changed,
+                "replacements": state.spell_repair.replacements,
+                "targetSynergy": state.spell_repair.target_synergy,
+                "targetSynergyTitle": state.spell_repair.target_synergy_title,
+                "force": state.spell_repair.force,
+                "coherence": state.spell_repair.coherence,
+                "resonance": state.spell_repair.resonance,
+                "outcome": state.spell_repair.outcome,
+                "tensionCost": state.spell_repair.tension_cost,
+                "consequence": state.spell_repair.consequence,
+                "reason": state.spell_repair.reason,
+            } if state.spell_repair is not None else None,
         } if state.spell_law is not None else None,
         "journey": {
             "roadBricks": state.journey.road_bricks,
@@ -434,6 +464,7 @@ def _calculation(
             _trace_step("SYNERGY", f"{spell['synergyTitle']} / {spell['synergy']}"),
         ]
         if spell["outcome"] == "HOLD":
+            repair = after["spell"]["repair"]
             failed = " · ".join(
                 label for label, key in (
                     ("F", "forceOk"), ("C", "coherenceOk"), ("R", "resonanceOk")
@@ -453,6 +484,8 @@ def _calculation(
                     _signal("C", "СВЯЗНОСТЬ", spell["coherence"], "ok" if spell["coherenceOk"] else "warn"),
                     _signal("R", "РЕЗОНАНС", spell["resonance"], "ok" if spell["resonanceOk"] else "warn"),
                     _signal("C′", "СЕРТИФИКАТ", certificate_before, "hold"),
+                    _signal("Δφ", "ПЕРЕСБОРКА", repair["replacements"], "wait"),
+                    _signal("τ", "ЦЕНА", repair["tensionCost"], "warn" if repair["tensionCost"] else "ok"),
                 ],
                 "title": "Заклинание удержано интерфейсом",
                 "theorem": "judgeSpell / partial_interface_morphism",
@@ -464,8 +497,15 @@ def _calculation(
                     *form_step,
                     *synergy_step,
                     _trace_step("HOLD", "ранг, сертификат, заклятие и дорога неизменны", "hold"),
+                    _trace_step("SEARCH", f"Lean: 4⁴ формул → минимум {repair['replacements']} замен"),
+                    *[
+                        _trace_step(slot, f"{repair['current'][slot]} → {repair['target'][slot]}", "wait")
+                        for slot in ("SOURCE", "INTENT", "PATH", "FORM")
+                        if repair["changed"][slot]
+                    ],
+                    _trace_step("CONSEQUENCE", f"{repair['outcome']} · tension +{repair['tensionCost']}"),
                 ],
-                "result": "HOLD / ИЗМЕНИТЕ ФОРМУЛУ",
+                "result": f"REBUILD {repair['replacements']} · {repair['targetSynergy']}",
                 "verdict": "HOLD",
             }
         if after["status"] == "awaiting_defense_roll":
@@ -521,22 +561,44 @@ def _calculation(
             "verdict": spell["outcome"],
         }
 
-    if action == "roll_defense":
+    if action in {"roll_defense", "choose_defense_method"}:
         roll = after["defenseRoll"]
+        method = after["defenseMethod"] or "THROW"
+        if roll is None:
+            return common | {
+                "scene": "axes",
+                "relation": "π chosen before v / I remains invariant",
+                "signals": [
+                    _signal("◈", "ПРОФИЛЬ", "RIFT", "warn"),
+                    _signal("π", "ПЛОСКОСТЬ", "?", "hold"),
+                    _signal("v", "КООРДИНАТЫ", "HIDDEN", "hold"),
+                ],
+                "title": "Разлом ждёт слепого обязательства",
+                "theorem": "defenseRoll_preserves_total ∧ full_block_impossible_for_method",
+                "equation": "choose π; then reveal riftRoll(v); Σv′ = Σv",
+                "steps": [
+                    _trace_step("METHOD", "RIFT / concentrated geometry"),
+                    _trace_step("HIDE", "X,Y,Z,W скрыты до выбора"),
+                    _trace_step("COMMIT", "выберите одну из шести плоскостей", "wait"),
+                ],
+                "result": "WAIT / BLIND PLANE",
+                "verdict": "COMMIT",
+            }
         axes = roll["axes"]
         planes = " · ".join(f"{item['id']}={item['power']}" for item in roll["planes"])
         return common | {
             "scene": "axes",
-            "relation": "v = (X,Y,Z,W) ∈ [1,6]⁴",
+            "relation": f"{method}(v) with Σv′ = Σv",
             "signals": [
                 _signal(axis, f"ОСЬ {axis}", axes[axis])
                 for axis in ("X", "Y", "Z", "W")
             ],
-            "title": "Четырёхосевой бросок",
-            "theorem": "rollDefense / axisFace_positive / axisFace_at_most_six",
-            "equation": f"v = ({axes['X']},{axes['Y']},{axes['Z']},{axes['W']}) ∈ [1,6]⁴",
+            "title": "Четырёхосевая геометрия защиты",
+            "theorem": "defenseRoll_preserves_total / defenseRoll_axes_positive",
+            "equation": f"{method}(v) = ({axes['X']},{axes['Y']},{axes['Z']},{axes['W']}); Σv′ = {roll['impact'] - after['interruptedLayer']['rank']}",
             "steps": [
                 _trace_step("SEED", f"ι={after['seed']} · cycle={after['cycle']} · rank={after['interruptedLayer']['rank']}"),
+                _trace_step("METHOD", method),
                 _trace_step("AXES", f"X={axes['X']} · Y={axes['Y']} · Z={axes['Z']} · W={axes['W']}"),
                 _trace_step("PROJECT", planes),
                 _trace_step("IMPACT", f"I = r + X + Y + Z + W = {roll['impact']}"),
@@ -586,6 +648,7 @@ def _calculation(
 
     if action == "confirm_defense":
         defense = after["defense"]
+        mastery = after["chapterTwo"]
         attack = before["continuity"]["pendingAttack"]
         reaction = after["continuity"]["lastReaction"]
         return common | {
@@ -596,6 +659,8 @@ def _calculation(
                 _signal("π", f"ПОГЛОЩЕНО / {defense['plane']}", defense["absorbed"]),
                 _signal("π⊥", f"ОТКРЫТО / {defense['complementPlane']}", defense["complementPower"], "hold"),
                 _signal("d", "ПРОБИТИЕ", defense["damage"], "warn"),
+                _signal("Ⅲ", "ГЕОМЕТРИИ", f"{sum(1 for seen in mastery['seen'].values() if seen)}/3"),
+                _signal("⚖", "БАЛАНС", mastery["balance"], "ok" if mastery["balanceHeld"] else "warn"),
             ],
             "title": "Разложение импульса и реакция",
             "theorem": "defense_conserves_impact ∧ full_block_impossible",
@@ -604,6 +669,8 @@ def _calculation(
                 _trace_step("PROJECT", f"π={defense['plane']} / π⊥={defense['complementPlane']}"),
                 _trace_step("CONSERVE", f"{defense['absorbed']} + {defense['damage']} = {after['defenseRoll']['impact']}"),
                 _trace_step("NONZERO", f"damage={defense['damage']} ≥ 1"),
+                _trace_step("MASTERY", f"mask={mastery['masteryMask']} · {mastery['status']}"),
+                _trace_step("FINALE", "Нулевой щит открыт" if mastery["finaleAllowed"] else "требуются THROW ∧ ANCHOR ∧ RIFT ∧ balance≥65", "ok" if mastery["finaleAllowed"] else "wait"),
                 _trace_step("PARENT", f"REACTION parent h{reaction['parentHead']} = CONTACT h{attack['head']}"),
                 _trace_step("APPEND", f"PLAYER/REACTION · Σ{reaction['epoch']} → h{reaction['head']}"),
             ],
@@ -800,6 +867,8 @@ class GameSession:
                 self.game.surrender()
             elif action == "roll_defense":
                 self.game.roll_defense()
+            elif action == "choose_defense_method":
+                self.game.choose_defense_method(_text(request.get("method"), "method"))
             elif action == "select_plane":
                 self.game.select_plane(_text(request.get("plane"), "plane"))
             elif action == "confirm_defense":

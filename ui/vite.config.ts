@@ -30,6 +30,9 @@ export default defineConfig(async () => {
   const localBindingConfig = {
     main: "./worker/index.ts",
     compatibility_flags: ["nodejs_compat"],
+    vars: process.env.IMBA_API_ORIGIN
+      ? { IMBA_API_ORIGIN: process.env.IMBA_API_ORIGIN }
+      : undefined,
     d1_databases: d1
       ? [
           {

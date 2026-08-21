@@ -9,7 +9,7 @@
 
 **Author:** [Aleksey Salkutsan](AUTHORS.md)
 
-**Source release:** `v0.1.3`
+**Source release:** `v0.1.4`
 
 **Repository:** [github.com/kernelpanic888/imba-mir](https://github.com/kernelpanic888/imba-mir)
 
@@ -219,7 +219,7 @@ by a successfully assembled counter-Imba.
 |---|---|
 | JSON sample parses | passed |
 | POSIX launchers parse | passed |
-| Python unit/integration tests | 13/13 passed |
+| Python unit/integration tests | 18/18 passed |
 | Seeded demo through protocol-compatible fake core | passed |
 | Python authority audit | passed; no `beats` reimplementation detected |
 | Lean build and real-core end-to-end run | passed with pinned Lean 4.30.0 |
@@ -227,8 +227,8 @@ by a successfully assembled counter-Imba.
 | Live UI bridge tick/defense/session/initiative smoke | passed |
 
 The single-domain loop now covers pure creation from the Shadow, a last-three
-observable cut, player-authored spell admission, the green road and first
-chapter revelation, Nature interruption, four-axis defense,
+observable cut, player-authored spell admission, the green road and the first
+two authored chapters, Nature interruption, three certified defense geometries,
 surrender, session memory, next-session initiative, and manually completed
 attack/reaction pairs with certified local continuity.
 Long-term goals, enemy variety, and deeper stack configuration remain future

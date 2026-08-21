@@ -58,6 +58,7 @@ contract: build-lean
 	$(CORE) promote 4 2
 	$(CORE) defense-roll 20260813 1 5
 	$(CORE) defense-resolve 20260813 1 5 XY
+	$(CORE) defense-mastery 3 RIFT 100 100
 	$(CORE) first-strike 3 8 2 0
 	$(CORE) tension-carry 8 3 2
 	$(CORE) living-admit 0 0 0 0 3 2 XY
@@ -71,6 +72,7 @@ contract: build-lean
 	$(CORE) progress-unlock 4 0 1 FORECAST
 	$(CORE) spell-law 20260813 1 1 1 0 0
 	$(CORE) spell-cast 20260813 1 1 1 0 0 SHADOW RELEASE ECHO DORMANT
+	$(CORE) spell-repair 20260813 1 2 9 8 0 MEMORY RELEASE ECHO VEIL
 	$(CORE) journey 20260813 4
 
 audit:

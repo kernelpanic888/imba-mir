@@ -37,6 +37,12 @@ private def parsePlane : String → Option Imba.Plane
   | "ZW" | "zw" => some .zw
   | _ => none
 
+private def parseDefenseMethod : String → Option Imba.DefenseMethod
+  | "THROW" | "throw" => some .throw
+  | "ANCHOR" | "anchor" => some .anchor
+  | "RIFT" | "rift" => some .rift
+  | _ => none
+
 private def parseCombatActor : String → Option Imba.CombatActor
   | "PLAYER" | "player" => some .player
   | "NATURE" | "nature" => some .nature
@@ -176,10 +182,11 @@ private def runPromote (rankText deltaText : String) : IO UInt32 :=
             ("name", toJson (Imba.name result))
           ])
 
-private def defenseFields (seed cycle interruptedRank : Nat) :
+private def defenseFields (method : Imba.DefenseMethod) (seed cycle interruptedRank : Nat) :
     List (String × Json) :=
-  let roll := Imba.rollDefense seed cycle interruptedRank
+  let roll := Imba.defenseRoll method seed cycle interruptedRank
   [
+    ("method", toJson method.label),
     ("seed", toJson seed),
     ("cycle", toJson cycle),
     ("interruptedRank", toJson interruptedRank),
@@ -196,7 +203,7 @@ private def defenseFields (seed cycle interruptedRank : Nat) :
     ("zw", toJson (Imba.planePower roll .zw))
   ]
 
-private def runDefenseRoll (seedText cycleText rankText : String) : IO UInt32 :=
+private def runDefenseRoll (seedText cycleText rankText methodText : String) : IO UInt32 :=
   match parseRank seedText with
   | none => invalidNatural "seed"
   | some seed =>
@@ -206,11 +213,14 @@ private def runDefenseRoll (seedText cycleText rankText : String) : IO UInt32 :=
           match parseRank rankText with
           | none => invalidNatural "interrupted rank"
           | some interruptedRank =>
-              emit (success (
-                ("op", toJson "defense-roll") ::
-                defenseFields seed cycle interruptedRank))
+              match parseDefenseMethod methodText with
+              | none => emit (failure "method must be THROW, ANCHOR, or RIFT") 2
+              | some method =>
+                  emit (success (
+                    ("op", toJson "defense-roll") ::
+                    defenseFields method seed cycle interruptedRank))
 
-private def runDefenseResolve (seedText cycleText rankText planeText : String) :
+private def runDefenseResolve (seedText cycleText rankText planeText methodText : String) :
     IO UInt32 :=
   match parseRank seedText with
   | none => invalidNatural "seed"
@@ -221,14 +231,15 @@ private def runDefenseResolve (seedText cycleText rankText planeText : String) :
           match parseRank rankText with
           | none => invalidNatural "interrupted rank"
           | some interruptedRank =>
-              match parsePlane planeText with
-              | none => emit (failure "plane must be XY, XZ, XW, YZ, YW, or ZW") 2
-              | some plane =>
-                  let roll := Imba.rollDefense seed cycle interruptedRank
+              match parseDefenseMethod methodText, parsePlane planeText with
+              | none, _ => emit (failure "method must be THROW, ANCHOR, or RIFT") 2
+              | _, none => emit (failure "plane must be XY, XZ, XW, YZ, YW, or ZW") 2
+              | some method, some plane =>
+                  let roll := Imba.defenseRoll method seed cycle interruptedRank
                   let damage := Imba.residualDamage interruptedRank roll plane
                   emit (success (
                     ("op", toJson "defense-resolve") ::
-                    defenseFields seed cycle interruptedRank ++ [
+                    defenseFields method seed cycle interruptedRank ++ [
                       ("plane", toJson plane.label),
                       ("planePower", toJson (Imba.planePower roll plane)),
                       ("complementPlane", toJson plane.complement.label),
@@ -236,8 +247,42 @@ private def runDefenseResolve (seedText cycleText rankText planeText : String) :
                       ("absorbed", toJson (Imba.absorbedDamage interruptedRank roll plane)),
                       ("damage", toJson damage),
                       ("fullyBlocked", toJson (damage == 0)),
-                      ("reason", toJson "chosen plane absorbs its axes; interrupted rank crosses the complementary plane")
+                      ("reason", toJson "selected geometry preserves Nature's impulse; chosen plane absorbs its axes; interrupted rank crosses the complementary plane")
                     ]))
+
+private def runDefenseMastery (maskText methodText ravenLifeText worldLifeText : String) :
+    IO UInt32 :=
+  match parseRank maskText with
+  | none => invalidNatural "defense mastery mask"
+  | some mask =>
+      match parseDefenseMethod methodText with
+      | none => emit (failure "method must be THROW, ANCHOR, or RIFT") 2
+      | some method =>
+          match parseRank ravenLifeText with
+          | none => invalidNatural "raven life"
+          | some ravenLife =>
+              match parseRank worldLifeText with
+              | none => invalidNatural "world life"
+              | some worldLife =>
+                  let result := Imba.recordDefenseMethod mask method
+                  let balance := Imba.lifeBalance ravenLife worldLife
+                  emit (success [
+                    ("op", toJson "defense-mastery"),
+                    ("previousMask", toJson (mask % 8)),
+                    ("method", toJson method.label),
+                    ("masteryMask", toJson result),
+                    ("throwSeen", toJson (Imba.defenseMethodSeen result .throw)),
+                    ("anchorSeen", toJson (Imba.defenseMethodSeen result .anchor)),
+                    ("riftSeen", toJson (Imba.defenseMethodSeen result .rift)),
+                    ("mastered", toJson (Imba.defenseMasteryComplete result)),
+                    ("ravenLife", toJson ravenLife),
+                    ("worldLife", toJson worldLife),
+                    ("balance", toJson balance),
+                    ("balanceHeld", toJson (decide (65 ≤ balance))),
+                    ("finaleAllowed", toJson (Imba.chapterTwoFinaleAllowed result ravenLife worldLife)),
+                    ("status", toJson (if Imba.chapterTwoFinaleAllowed result ravenLife worldLife then
+                      "KEEPER_OF_BALANCE" else "LEARNING_GEOMETRIES"))
+                  ])
 
 private def runFirstStrike (ticksText tensionText reflectionText usedText : String) : IO UInt32 :=
   match parseRank ticksText with
@@ -696,6 +741,59 @@ private def runSpellCast (identityText cycleText tickText rankText certificateTe
   | _, _, _, _, _, _, _, _, _, _ =>
       emit (failure "spell-cast expects six naturals and a typed SOURCE INTENT PATH FORM") 2
 
+private def runSpellRepair (identityText cycleText tickText rankText certificateText
+    marksText sourceText intentText pathText formText : String) : IO UInt32 :=
+  match parseRank identityText, parseRank cycleText, parseRank tickText,
+      parseRank rankText, parseRank certificateText, parseRank marksText,
+      parseSpellSource sourceText, parseSpellIntent intentText,
+      parseSpellPath pathText, parseSpellForm formText with
+  | some identity, some cycle, some pendingTick, some rank, some certificate,
+      some masteryMarks, some source, some intent, some path, some form =>
+      let law := Imba.spellLaw identity cycle pendingTick rank certificate masteryMarks
+      let current : Imba.SpellFormula := { source, intent, path, form }
+      match Imba.spellRepairPlan law current with
+      | none => emit (failure "no admitted reconstruction exists inside the current spell interface") 2
+      | some plan =>
+          emit (success [
+            ("op", toJson "spell-repair"),
+            ("identity", toJson identity),
+            ("cycle", toJson cycle),
+            ("pendingTick", toJson pendingTick),
+            ("rank", toJson rank),
+            ("certificate", toJson certificate),
+            ("masteryMarks", toJson masteryMarks),
+            ("currentSource", toJson source.label),
+            ("currentIntent", toJson intent.label),
+            ("currentPath", toJson path.label),
+            ("currentForm", toJson form.label),
+            ("targetSource", toJson plan.target.source.label),
+            ("targetSourcePhrase", toJson plan.target.source.phrase),
+            ("targetIntent", toJson plan.target.intent.label),
+            ("targetIntentPhrase", toJson plan.target.intent.phrase),
+            ("targetPath", toJson plan.target.path.label),
+            ("targetPathPhrase", toJson plan.target.path.phrase),
+            ("targetForm", toJson plan.target.form.label),
+            ("targetFormPhrase", toJson plan.target.form.phrase),
+            ("targetSynergy", toJson plan.targetSynergy.label),
+            ("targetSynergyTitle", toJson plan.targetSynergy.title),
+            ("targetForce", toJson plan.targetScore.force),
+            ("targetCoherence", toJson plan.targetScore.coherence),
+            ("targetResonance", toJson plan.targetScore.resonance),
+            ("targetOutcome", toJson plan.targetOutcome.label),
+            ("replacements", toJson plan.replacements),
+            ("tensionCost", toJson plan.tensionCost),
+            ("changeSource", toJson (source != plan.target.source)),
+            ("changeIntent", toJson (intent != plan.target.intent)),
+            ("changePath", toJson (path != plan.target.path)),
+            ("changeForm", toJson (form != plan.target.form)),
+            ("consequence", toJson (if plan.tensionCost = 0 then
+              "route step: formula draft only; target confirmation: rank +1; certificate +1; tension unchanged"
+              else "route step: formula draft only; target confirmation: rank +1; certificate +1; tension +1")),
+            ("reason", toJson "Lean exhaustively searched the finite rune interface; minimum replacements win, then minimum declared tension")
+          ])
+  | _, _, _, _, _, _, _, _, _, _ =>
+      emit (failure "spell-repair expects six naturals and a typed SOURCE INTENT PATH FORM") 2
+
 private def runJourney (identityText certificateText : String) : IO UInt32 :=
   match parseRank identityText, parseRank certificateText with
   | some identity, some certificate =>
@@ -741,12 +839,19 @@ def run (args : List String) : IO UInt32 :=
   | "fuse" :: _ => wrongArity "imba-core fuse <left> <right>"
   | ["promote", rank, delta] => runPromote rank delta
   | "promote" :: _ => wrongArity "imba-core promote <rank> <delta>"
-  | ["defense-roll", seed, cycle, rank] => runDefenseRoll seed cycle rank
-  | "defense-roll" :: _ => wrongArity "imba-core defense-roll <seed> <cycle> <interrupted-rank>"
+  | ["defense-roll", seed, cycle, rank] => runDefenseRoll seed cycle rank "THROW"
+  | ["defense-roll", seed, cycle, rank, method] => runDefenseRoll seed cycle rank method
+  | "defense-roll" :: _ => wrongArity "imba-core defense-roll <seed> <cycle> <interrupted-rank> [THROW|ANCHOR|RIFT]"
   | ["defense-resolve", seed, cycle, rank, plane] =>
-      runDefenseResolve seed cycle rank plane
+      runDefenseResolve seed cycle rank plane "THROW"
+  | ["defense-resolve", seed, cycle, rank, plane, method] =>
+      runDefenseResolve seed cycle rank plane method
   | "defense-resolve" :: _ => wrongArity
-      "imba-core defense-resolve <seed> <cycle> <interrupted-rank> <plane>"
+      "imba-core defense-resolve <seed> <cycle> <interrupted-rank> <plane> [THROW|ANCHOR|RIFT]"
+  | ["defense-mastery", mask, method, ravenLife, worldLife] =>
+      runDefenseMastery mask method ravenLife worldLife
+  | "defense-mastery" :: _ => wrongArity
+      "imba-core defense-mastery <mask> <THROW|ANCHOR|RIFT> <raven-life> <world-life>"
   | ["first-strike", ticks, tension, reflection, used] =>
       runFirstStrike ticks tension reflection used
   | "first-strike" :: _ => wrongArity
@@ -797,6 +902,10 @@ def run (args : List String) : IO UInt32 :=
       runSpellCast identity cycle pendingTick rank certificate marks source intent path form
   | "spell-cast" :: _ => wrongArity
       "imba-core spell-cast <identity> <cycle> <pending-tick> <rank> <certificate> <mastery-marks> <SOURCE> <INTENT> <PATH> <FORM>"
+  | ["spell-repair", identity, cycle, pendingTick, rank, certificate, marks, source, intent, path, form] =>
+      runSpellRepair identity cycle pendingTick rank certificate marks source intent path form
+  | "spell-repair" :: _ => wrongArity
+      "imba-core spell-repair <identity> <cycle> <pending-tick> <rank> <certificate> <mastery-marks> <SOURCE> <INTENT> <PATH> <FORM>"
   | ["journey", identity, certificate] => runJourney identity certificate
   | "journey" :: _ => wrongArity "imba-core journey <identity> <certificate>"
   | [] => emit (failure "missing command") 2

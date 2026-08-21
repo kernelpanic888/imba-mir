@@ -328,6 +328,93 @@ def judgeSpell (law : SpellLaw) (source : SpellSource) (intent : SpellIntent)
 def spellCost (outcome : SpellOutcome) : Nat :=
   if outcome == .appendWithCost then 1 else 0
 
+/-! ## Lean-owned reconstruction route
+
+The guide may explain a route, but it never invents one in presentation code.
+Lean searches the complete finite formula space, prefers the smallest number
+of changed runes, and then prefers the lower declared tension consequence.
+-/
+
+structure SpellFormula where
+  source : SpellSource
+  intent : SpellIntent
+  path : SpellPath
+  form : SpellForm
+  deriving Repr, DecidableEq, BEq
+
+def SpellFormula.synergy (formula : SpellFormula) : SpellSynergy :=
+  spellSynergy formula.source formula.intent formula.path formula.form
+
+def SpellFormula.score (law : SpellLaw) (formula : SpellFormula) : SpellScore :=
+  spellScore formula.source formula.intent formula.path formula.form law.metaTier
+
+def SpellFormula.outcome (law : SpellLaw) (formula : SpellFormula) : SpellOutcome :=
+  judgeSpell law formula.source formula.intent formula.path formula.form
+    formula.synergy (formula.score law)
+
+def spellFormulaDistance (left right : SpellFormula) : Nat :=
+  (if left.source == right.source then 0 else 1) +
+  (if left.intent == right.intent then 0 else 1) +
+  (if left.path == right.path then 0 else 1) +
+  (if left.form == right.form then 0 else 1)
+
+def allSpellSources : List SpellSource := [.will, .shadow, .memory, .spark]
+def allSpellIntents : List SpellIntent := [.release, .reveal, .bind, .invert]
+def allSpellPaths : List SpellPath := [.road, .echo, .rift, .orbit]
+def allSpellForms : List SpellForm := [.dormant, .blade, .veil, .prism]
+
+def allSpellFormulas : List SpellFormula :=
+  allSpellSources.flatMap fun source =>
+    allSpellIntents.flatMap fun intent =>
+      allSpellPaths.flatMap fun path =>
+        allSpellForms.map fun form => { source, intent, path, form }
+
+def repairTargetBetter (law : SpellLaw) (current candidate incumbent : SpellFormula) : Bool :=
+  let candidateDistance := spellFormulaDistance current candidate
+  let incumbentDistance := spellFormulaDistance current incumbent
+  let candidateCost := spellCost (candidate.outcome law)
+  let incumbentCost := spellCost (incumbent.outcome law)
+  if candidateDistance < incumbentDistance then true
+  else if incumbentDistance < candidateDistance then false
+  else candidateCost < incumbentCost
+
+def bestRepairTarget (law : SpellLaw) (current : SpellFormula) : Option SpellFormula :=
+  let admitted := allSpellFormulas.filter fun candidate => candidate.outcome law != .hold
+  admitted.foldl (fun best candidate =>
+    match best with
+    | none => some candidate
+    | some incumbent =>
+        if repairTargetBetter law current candidate incumbent then some candidate else best
+  ) (none : Option SpellFormula)
+
+structure SpellRepairPlan where
+  current : SpellFormula
+  target : SpellFormula
+  replacements : Nat
+  targetSynergy : SpellSynergy
+  targetScore : SpellScore
+  targetOutcome : SpellOutcome
+  tensionCost : Nat
+  deriving Repr, DecidableEq
+
+def spellRepairPlan (law : SpellLaw) (current : SpellFormula) : Option SpellRepairPlan :=
+  (bestRepairTarget law current).map fun target =>
+    let outcome := target.outcome law
+    { current
+      target
+      replacements := spellFormulaDistance current target
+      targetSynergy := target.synergy
+      targetScore := target.score law
+      targetOutcome := outcome
+      tensionCost := spellCost outcome }
+
+theorem append_has_no_tension_consequence : spellCost .append = 0 := by decide
+
+theorem appendWithCost_has_one_tension_consequence :
+    spellCost .appendWithCost = 1 := by decide
+
+theorem held_formula_has_no_state_transition_cost : spellCost .hold = 0 := by decide
+
 example : judgeSpell (spellLaw 1 1 1 1 0 0) .shadow .release .echo .dormant .none
     (spellScore .shadow .release .echo .dormant 0) = .append := by native_decide
 
@@ -353,5 +440,14 @@ example : spellSynergy .memory .release .echo .veil = .remembrance := by native_
 example : spellSynergy .spark .bind .orbit .prism = .nova := by native_decide
 
 example : spellSynergy .will .invert .rift .blade = .riftblade := by native_decide
+
+example :
+    let law := spellLaw 20260813 1 2 9 8 0
+    let current : SpellFormula := ⟨.memory, .release, .echo, .veil⟩
+    (spellRepairPlan law current).map (fun plan =>
+      (plan.replacements, plan.target.source, plan.target.intent, plan.targetSynergy,
+        plan.targetOutcome, plan.tensionCost)) =
+      some (2, .spark, .reveal, .revelation, .append, 0) := by
+  native_decide
 
 end Imba
