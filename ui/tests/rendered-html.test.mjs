@@ -111,6 +111,29 @@ test("mobile menu keeps every published chapter visible without a hidden horizon
   assert.match(styles, /\.game-menu-actions \.game-menu-chapters button b \{ grid-row: 2; grid-column: 1;/);
 });
 
+test("completed spell books allocate space only to sections that actually exist", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(styles, /\.state-awaiting_spell \.magic-stage-pane \.spell-builder\[data-complete="true"\] \{\s*grid-template-rows: auto minmax\(250px,1fr\);\s*grid-auto-rows: max-content;/);
+  assert.match(styles, /@media \(max-height: 760px\)[\s\S]*?\.spell-builder\[data-complete="true"\] \{\s*grid-template-rows: auto minmax\(118px,1fr\);\s*grid-auto-rows: max-content;/);
+  assert.doesNotMatch(styles, /\.spell-builder\[data-complete="true"\][^{]*\{[^}]*grid-template-rows:[^;}]*minmax\(104px/);
+});
+
+test("required defense choices call for attention without moving the interface", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(styles, /\.defense-methods button:not\(:disabled\) \{ animation: defense-choice-call 2\.25s ease-in-out infinite; \}/);
+  assert.match(styles, /\.defense-methods button:nth-child\(2\) \{ animation-delay: -\.75s; \}\.defense-methods button:nth-child\(3\) \{ animation-delay: -1\.5s; \}/);
+  assert.match(styles, /@keyframes defense-choice-call \{[\s\S]*?border-color: currentColor;[\s\S]*?box-shadow:/);
+  assert.match(styles, /\.defense-methods button:hover:not\(:disabled\),\.defense-methods button:focus-visible \{ animation: none;/);
+  assert.match(styles, /\.defense-methods button:disabled \{ animation: none;/);
+  const pulse = styles.slice(
+    styles.indexOf("@keyframes defense-choice-call"),
+    styles.indexOf(".defense-methods i"),
+  );
+  assert.doesNotMatch(pulse, /transform:/);
+});
+
 test("the reality slice mirrors player input and Lean-backed state transitions", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
