@@ -1,6 +1,6 @@
 # IMBA / MIR v0.1.7
 
-![IMBA / MIR — The Raven on the Green Road](assets/imba-mir-cover.png)
+![IMBA / MIR — The Raven on the Green Road](https://raw.githubusercontent.com/kernelpanic888/imba-mir/main/docs/assets/imba-mir-cover.png)
 
 ## [▶ PLAY IMBA / MIR](https://imba-mir-aleksey.kernelpanic888.chatgpt.site/)
 
